@@ -19,9 +19,10 @@ contract AuctionFactory is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     function initialize(address initialAdmin) public initializer {
         __AccessControl_init();
-        grantRole(ADMIN_ROLE, initialAdmin);
-        grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _setRoleAdmin(ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
+        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
+        _grantRole(ADMIN_ROLE, initialAdmin);
+        
     }
 
     // 创建一个新的拍卖合约
@@ -38,30 +39,19 @@ contract AuctionFactory is Initializable, UUPSUpgradeable, AccessControlUpgradea
     ) public {
         // 验证客户是否是 NFT 的所有者
         require(IERC721(_nftContract).ownerOf(_tokenId) == msg.sender, "You are not the owner of this NFT");
-
+        
         // 创建新的 DutchAuction 合约
         DutchAuction newAuction = new DutchAuction();
-
-        // 授权 DutchAuction 合约来转移 NFT
-        IERC721(_nftContract).approve(address(newAuction), _tokenId); // 授权 DutchAuction 合约
 
         // 初始化拍卖合约
         newAuction.initialize(msg.sender, _startingPrice, _endPrice, _duration, _priceDecrement, _decrementInterval, _depositToken, _depositAmount, _nftContract, _tokenId);
         
+        // 授权 DutchAuction 合约来转移 NFT
+        IERC721(_nftContract).approve(address(newAuction), _tokenId); // 授权 DutchAuction 合约
+
         // 将新拍卖的地址添加到数组中
         auctions.push(address(newAuction));
     }
-
-    /*
-            address _seller,
-        uint _startingPrice,
-        uint _endPrice,
-        uint _duration,
-        uint _priceDecrement,
-        uint _decrementInterval,
-        address _depositToken,
-        uint _depositAmount
-    */
 
     // 返回所有拍卖的地址
     function getAuctions() public view returns (address[] memory) {
@@ -134,7 +124,7 @@ contract DutchAuction is KeeperCompatibleInterface, Initializable, UUPSUpgradeab
         depositAmount = _depositAmount;
         nftContract = _nftContract;
         tokenId = _tokenId;
-        grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
     }
 
     // 支付押金
