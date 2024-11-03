@@ -39,16 +39,13 @@ contract AuctionFactory is Initializable, UUPSUpgradeable, AccessControlUpgradea
     ) public {
         // 验证客户是否是 NFT 的所有者
         require(IERC721(_nftContract).ownerOf(_tokenId) == msg.sender, "You are not the owner of this NFT");
-        
+
         // 创建新的 DutchAuction 合约
         DutchAuction newAuction = new DutchAuction();
 
         // 初始化拍卖合约
         newAuction.initialize(msg.sender, _startingPrice, _endPrice, _duration, _priceDecrement, _decrementInterval, _depositToken, _depositAmount, _nftContract, _tokenId);
         
-        // 授权 DutchAuction 合约来转移 NFT
-        IERC721(_nftContract).approve(address(newAuction), _tokenId); // 授权 DutchAuction 合约
-
         // 将新拍卖的地址添加到数组中
         auctions.push(address(newAuction));
     }

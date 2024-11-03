@@ -28,7 +28,10 @@ describe("Auction Contract Logic Test", function () {
         // 为参与者铸造 NFT
         await myNFT.mint(owner.address, 1); // 铸造 NFT ID 1 给 owner
         await myNFT.mint(owner.address, 2); // 铸造 NFT ID 2 给 owner
-
+        const ownerOfToken1 = await myNFT.ownerOf(1);
+        const ownerOfToken2 = await myNFT.ownerOf(2);
+        console.log("Owner of Token 1:", ownerOfToken1);
+        console.log("Owner of Token 2:", ownerOfToken2);
         // 给每个参与者一些 ERC20 代币
         await myERC20.mint(addr1.address, ethers.parseEther("100"));
         await myERC20.mint(addr2.address, ethers.parseEther("100"));
@@ -60,7 +63,9 @@ describe("Auction Contract Logic Test", function () {
         await myERC20.approve(auctionFactory.target, ethers.parseEther("10")); // 授权支付押金
 
         console.log("123");
-        await auctionFactory.connect(owner).createAuction(
+        await myNFT.connect(owner).approve(auctionFactory.target, 1);
+
+        await auctionFactory.createAuction(
             ethers.parseEther("10"),  // 起始价格
             ethers.parseEther("0"),   // 结束价格
             3600,                            // 持续时间（1小时）
