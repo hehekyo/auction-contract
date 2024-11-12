@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 
 /*
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -27,7 +28,19 @@ contract PriceConsumer {
 }
 */
 
+//0xb41b78Ce3D1BDEDE48A3d303eD2564F6d1F6fff0
+
+//0x1238536071E1c677A632429e3655c799b22cDA52 NFT 代币ID: 25405
+
+//const routerAddress = "0xb41b78Ce3D1BDEDE48A3d303eD2564F6d1F6fff0";  // 你要测试的路由合约地址
+//const token0Address = "0xe7be684EfF97FcEe715Ab2a8B8FA52f261e72800";  // 你池子中的 token0 地址
+//const token1Address = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14";  // 你池子中的 token1 地址
+
 contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+
+    //ISwapRouter public swapRouter; 
+    //address public myERC20;
+    //address public ETHToken;
 
     // 定义拍卖类型
     enum AuctionType { DutchAuction, EnglishAuction }
@@ -102,7 +115,51 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(ADMIN_ROLE, initialAdmin);
         myERC20Token = _myERC20Token;
+        //swapRouter = ISwapRouter(0xb41b78Ce3D1BDEDE48A3d303eD2564F6d1F6fff0);
+        //myERC20 = 0xe7be684EfF97FcEe715Ab2a8B8FA52f261e72800; // myERC20代币地址（硬编码）
+        //ETHToken = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14; // ETH地址（硬编码）
     }
+
+    /*
+    // 更新 swapRouter 地址
+    function setSwapRouter(address _swapRouter) external onlyRole(ADMIN_ROLE) {
+        swapRouter = ISwapRouter(_swapRouter);
+    }
+
+    // 更新 myERC20 地址
+    function setMyERC20(address _myERC20) external onlyRole(ADMIN_ROLE) {
+        myERC20 = _myERC20;
+    }
+
+    // 更新 ETH 地址
+    function setETH(address _ETH) external onlyRole(ADMIN_ROLE) {
+        ETHToken = _ETH;
+    }
+
+    // 执行代币交换的方法
+    function swapExactInputSingle(uint256 amountIn) external returns (uint256 amountOut) {
+        // 1. 从用户钱包转移 `token0` 到合约
+        IERC20(ETHToken).transferFrom(msg.sender, address(this), amountIn);
+
+        // 2. 授权 SwapRouter 使用 `token0`
+        IERC20(ETHToken).approve(address(swapRouter), amountIn);
+
+        // 3. 设置 Uniswap V3 交换参数
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: ETHToken,
+            tokenOut: myERC20,
+            fee: 3000, // 这里使用 0.3% 的手续费等级，常见的有 500 (0.05%), 3000 (0.3%), 10000 (1%)
+            recipient: msg.sender,
+            deadline: block.timestamp + 300,
+            amountIn: amountIn,
+            amountOutMinimum: 0, // 最小接受数量（可设置为 0 表示接受任意数量）
+            sqrtPriceLimitX96: 0 // 价格限制，0 表示没有限制
+        });
+
+        // 4. 调用 SwapRouter 的 swap 方法
+        amountOut = swapRouter.exactInputSingle(params);
+    }
+    */
 
     // 创建英式拍卖
     function createEnglishAuction(
