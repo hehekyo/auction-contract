@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.22;
 
 import "@chainlink/contracts/src/v0.8/automation/KeeperCompatible.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -7,6 +7,25 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/*
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+contract PriceConsumer {
+    AggregatorV3Interface internal priceFeed;
+
+    // 初始化时传入预言机地址
+    constructor(address _priceFeed) {
+        priceFeed = AggregatorV3Interface(_priceFeed);
+    }
+
+    // 获取价格
+    function getLatestPrice() public view returns (int) {
+        (, int price, , , ) = priceFeed.latestRoundData();
+        return price;
+    }
+}
+*/
 
 contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgradeable, AccessControlUpgradeable {
 
@@ -90,7 +109,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         uint _startingPrice,
         uint _reservePrice,
         uint _duration,
-        uint _depositAmount,
+        //uint _depositAmount,
         address _nftContract,
         uint _tokenId
     ) public {
@@ -103,7 +122,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.nftContract = _nftContract;
         newAuction.tokenId = _tokenId;
         newAuction.auctionStatus = AuctionStatus.Registration;
-        newAuction.depositAmount = _depositAmount;
+        newAuction.depositAmount = 100; //_depositAmount;
         newAuction.auctionType = AuctionType.EnglishAuction;
         newAuction.duration = _duration;
 
@@ -122,7 +141,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         uint _duration,
         uint _priceDecrement,
         uint _decrementInterval,
-        uint _depositAmount,
+        //uint _depositAmount,
         address _nftContract,
         uint _tokenId
     ) public {
@@ -136,7 +155,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.nftContract = _nftContract;
         newAuction.tokenId = _tokenId;
         newAuction.auctionStatus = AuctionStatus.Registration;
-        newAuction.depositAmount = _depositAmount;
+        newAuction.depositAmount = 100; //_depositAmount;
         newAuction.auctionType = AuctionType.DutchAuction;
         newAuction.duration = _duration;
 
@@ -155,16 +174,13 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         Auction storage auction = auctions[auctionId];
         require(msg.sender == auction.seller, "Only seller can start.");
 
-        AuctionStatus auctionStatus = auction.auctionStatus;
-        require(auctionStatus == AuctionStatus.Registration, "Auction already started.");
-
-        AuctionType auctionType = auction.auctionType;
-        uint _duration = auction.duration;
+        require(auction.auctionStatus == AuctionStatus.Registration, "Auction already started.");
 
         auction.auctionStatus = AuctionStatus.Ongoing;
-        uint _endTime = block.timestamp + _duration;
+        
+        uint _endTime = block.timestamp + auction.duration;
 
-        if (auctionType == AuctionType.DutchAuction) {
+        if (auction.auctionType == AuctionType.DutchAuction) {
             auction.dutchAuction.auctionEndTime = _endTime;
         } else  {
             auction.englishAuction.auctionEndTime = _endTime;
@@ -178,14 +194,12 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         require(_auctionIdExist[auctionId] == true, "Auction does not exist");
 
         Auction storage auction = auctions[auctionId];
-        AuctionStatus auctionStatus = auction.auctionStatus;
-        require(auctionStatus == AuctionStatus.Ongoing, "Auction is not ongoing");
+
+        require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction is not ongoing");
         require(msg.sender != auction.seller, "Seller cannot bid");
         require(auction.hasDeposited[msg.sender], "Deposit not paid");
 
-        AuctionType auctionType = auction.auctionType;
-
-        if (auctionType == AuctionType.DutchAuction) {
+        if (auction.auctionType == AuctionType.DutchAuction) {
             // 荷兰拍卖
             auction.highestBidder = msg.sender;
             emit BidPlaced(auctionId, msg.sender, auction.dutchAuction.currentPrice);
@@ -204,12 +218,11 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         require(_auctionIdExist[auctionId] == true, "Auction does not exist");
 
         Auction storage auction = auctions[auctionId];
-        AuctionStatus auctionStatus = auction.auctionStatus;
-        require(auctionStatus == AuctionStatus.Registration, "Auction already started");
 
-        uint amount = auction.depositAmount;
+        require(auction.auctionStatus == AuctionStatus.Registration || auction.auctionStatus == AuctionStatus.Ongoing, "Auction already started"); // 准备阶段 和 开始阶段都可以交押金
+
         // 转账押金
-        require(myERC20Token.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        require(myERC20Token.transferFrom(msg.sender, address(this), auction.depositAmount), "Transfer failed");
 
         // 记录押金
         auction.hasDeposited[msg.sender] = true;
@@ -223,8 +236,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         Auction storage auction = auctions[auctionId];
         require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction is not ongoing");
 
-        address highestBidder = auction.highestBidder;
-        if (highestBidder == address(0)) {
+        if (auction.highestBidder == address(0)) {
             emit  AuctionFailed(auctionId);
             return;
         }
@@ -261,11 +273,10 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         // 确保该用户没有成为赢家
         require(msg.sender != auction.highestBidder, "Winner cannot refund deposit");
 
-        uint depositAmount = auction.depositAmount;
         auction.hasDeposited[msg.sender] = false;  // 标记押金已退还
 
         // 退还押金
-        require(myERC20Token.transfer(msg.sender, depositAmount), "Refund failed");
+        require(myERC20Token.transfer(msg.sender, auction.depositAmount), "Refund failed");
 
         emit DepositRefunded(msg.sender, auctionId);
     }
@@ -310,19 +321,24 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
     function performUpkeep(bytes calldata /* performData */) external override {
         // 结束所有符合条件的英式拍卖或荷兰拍卖（有出价者）
         for (uint i = 0; i < auctions2End.length; i++) {
-            uint auctionId = auctions2End[i];
-            endAuction(auctionId);  // 调用 endAuction 结束拍卖
+            endAuction(auctions2End[i]);  // 调用 endAuction 结束拍卖
         }
 
         // 更新所有符合条件的荷兰拍卖价格
         for (uint i = 0; i < dutchAuctions2UpdatePrice.length; i++) {
-            uint auctionId = dutchAuctions2UpdatePrice[i];
-            Auction storage auction = auctions[auctionId];
+            Auction storage auction = auctions[dutchAuctions2UpdatePrice[i]];
 
             // 降价
             auction.dutchAuction.currentPrice -= auction.dutchAuction.priceDecrement;
             auction.dutchAuction.lastUpdateTime = block.timestamp;  // 更新最后更新时间
         }
+    }
+
+    function addAdmin(address newAdmin) public onlyRole(ADMIN_ROLE) {
+        grantRole(ADMIN_ROLE, newAdmin);
+    }
+    function removeAdmin(address admin) public onlyRole(ADMIN_ROLE) {
+        revokeRole(ADMIN_ROLE, admin);
     }
 
 }
