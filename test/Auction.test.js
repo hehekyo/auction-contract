@@ -1,132 +1,242 @@
-const { ethers, upgrades } = require("hardhat");
 const { expect } = require("chai");
+const { ethers, upgrades } = require("hardhat");
 
-describe("Auction Contract Logic Test", function () {
-    let owner, addr1, addr2, addr3;
-    let myNFT, myERC20, auctionFactory, auction;
+describe("AuctionManagerUpgradeable", function () {
+  let auctionManager;
+  let myERC20Token;
+  let myNFT;
+  let owner;
+  let seller;
+  let bidder1;
+  let bidder2;
+  let bidder3;
+  const initialDeposit = ethers.parseUnits("100", 18); // ERC20 token 押金
+  const nftTokenId = 1;
+  const startingPrice = ethers.parseUnits("100", 18); // 起拍价
+  const reservePrice = ethers.parseUnits("50", 18);  // 保留价
+  const auctionDuration = 3600; // 1 小时
 
-    before(async () => {
-        // 获取合约的工厂
-        const MyNFT = await ethers.getContractFactory("MyNFT");
-        const MyERC20 = await ethers.getContractFactory("MyERC20");
-        const AuctionFactory = await ethers.getContractFactory("AuctionFactory");
+  beforeEach(async function () {
+    [owner, seller, bidder1, bidder2, bidder3] = await ethers.getSigners();
 
-        // 获取账户
-        [owner, addr1, addr2, addr3] = await ethers.getSigners();
-        console.log("owner:", owner.address); // 打印地址
+    // 部署 ERC20 token 合约
+    const MyERC20 = await ethers.getContractFactory("MyERC20");
+    myERC20Token = await MyERC20.deploy(owner.address);
+    await myERC20Token.waitForDeployment();
 
-        // 部署 ERC20 代币合约
-        myERC20 = await MyERC20.deploy(owner.address);
-        await myERC20.waitForDeployment();
-        console.log("ERC20 deployed at:", myERC20.target); // 打印地址
+    // 部署 NFT 合约
+    const MyNFT = await ethers.getContractFactory("MyNFT");
+    myNFT = await MyNFT.deploy(owner.address);
+    await myNFT.waitForDeployment();
 
-        // 部署 NFT 合约
-        myNFT = await MyNFT.deploy(owner.address);
-        await myNFT.waitForDeployment();
-        console.log("NFT deployed at:", myNFT.target); // 打印地址
+    console.log("MyERC20 Address:", await myERC20Token.getAddress());
+    console.log("MyNFT Address:", await myNFT.getAddress());
 
-        // 为参与者铸造 NFT
-        await myNFT.mint(owner.address, 1); // 铸造 NFT ID 1 给 owner
-        await myNFT.mint(owner.address, 2); // 铸造 NFT ID 2 给 owner
-        const ownerOfToken1 = await myNFT.ownerOf(1);
-        const ownerOfToken2 = await myNFT.ownerOf(2);
-        console.log("Owner of Token 1:", ownerOfToken1);
-        console.log("Owner of Token 2:", ownerOfToken2);
-        // 给每个参与者一些 ERC20 代币
-        await myERC20.mint(addr1.address, ethers.parseEther("100"));
-        await myERC20.mint(addr2.address, ethers.parseEther("100"));
-        await myERC20.mint(addr3.address, ethers.parseEther("100"));
+    // 给参与者分配一些 ERC20 token 和 NFT
+    await myERC20Token.transfer(bidder1.address, ethers.parseUnits("1500", 18));
+    await myERC20Token.transfer(bidder2.address, ethers.parseUnits("1500", 18));
+    await myERC20Token.transfer(bidder3.address, ethers.parseUnits("1500", 18));
+    await myNFT.mint(seller.address, nftTokenId); // 销售者铸造NFT
 
-        // 部署拍卖工厂合约
-        auctionFactory = await upgrades.deployProxy(AuctionFactory, [owner.address], { initializer: "initialize" });
-        await auctionFactory.waitForDeployment();
-    });
+    // 部署升级版的 AuctionManager 合约
+    const AuctionManager = await ethers.getContractFactory("AuctionManager");
+    const myERC20TokenAddress = await myERC20Token.getAddress();
+    auctionManager = await upgrades.deployProxy(AuctionManager, [owner.address, myERC20TokenAddress], { initializer: "initialize" });
+    await auctionManager.waitForDeployment();
+  });
 
-    /*
-            address _seller,
-        uint _startingPrice,
-        uint _endPrice,
-        uint _duration,
-        uint _priceDecrement,
-        uint _decrementInterval,
-        address _depositToken,
-        uint _depositAmount,
-        address _nftContract,
-        uint256 _tokenId
-    */
+  it("should create an auction", async function () {
+    // 创建拍卖
+    const myNFTaddress = await myNFT.getAddress();
+    await auctionManager.connect(seller).createEnglishAuction(
+      startingPrice, // startingPrice
+      reservePrice,  // reservePrice
+      auctionDuration, // duration
+      myNFTaddress, // nftContract
+      nftTokenId // tokenId
+    );
 
-    it("Should create an auction", async () => {
-        console.log("myERC20 address:", myERC20.target);
-        console.log("myNFT address:", myNFT.target);
-        console.log("owner address:", owner.address);
+    const auction = await auctionManager.auctions(1);
+    expect(auction.auctionStatus).to.equal(0); // 初始状态是 Registration
+    expect(auction.seller).to.equal(seller.address);
+    expect(auction.englishAuction.startingPrice).to.equal(startingPrice);
+  });
 
-        await myERC20.approve(auctionFactory.target, ethers.parseEther("10")); // 授权支付押金
+  it("should allow participants to deposit tokens", async function () {
+    // 创建拍卖
+    await auctionManager.createEnglishAuction(
+      startingPrice, 
+      reservePrice,  
+      auctionDuration, 
+      await myNFT.getAddress(), 
+      nftTokenId 
+    );
+    const auctionManagerAddress = await auctionManager.getAddress();
 
-        console.log("123");
-        await myNFT.connect(owner).approve(auctionFactory.target, 1);
+    // bidder1 授权 ERC20 token
+    await myERC20Token.connect(bidder1).approve(auctionManagerAddress, initialDeposit);
+    await auctionManager.connect(bidder1).deposit(1);
 
-        await auctionFactory.createAuction(
-            ethers.parseEther("10"),  // 起始价格
-            ethers.parseEther("0"),   // 结束价格
-            3600,                            // 持续时间（1小时）
-            ethers.parseEther("1"),   // 每次降价幅度
-            60,                              // 降价间隔（60秒）
-            myERC20.target,                // 押金代币地址
-            ethers.parseEther("10"),  // 押金金额
-            myNFT.target,                  // NFT 合约地址
-            1                                // NFT tokenId
-        );
+    // bidder2 授权 ERC20 token
+    await myERC20Token.connect(bidder2).approve(auctionManagerAddress, initialDeposit);
+    await auctionManager.connect(bidder2).deposit(1);
 
-        const auctions = await auctionFactory.getAuctions();
-        console.log(auctions.length);
-        expect(auctions.length).to.equal(1);
-    });
+    // bidder3 授权 ERC20 token
+    await myERC20Token.connect(bidder3).approve(auctionManagerAddress, initialDeposit);
+    await auctionManager.connect(bidder3).deposit(1);
 
-    it("Should allow participants to pay deposit", async () => {
-        await myERC20.connect(addr1).approve(auction.address, ethers.parseEther("10"));
-        await myERC20.connect(addr1).transfer(auction.address, ethers.parseEther("10")); // 支付押金
-        expect(await auction.hasDeposited(addr1.address)).to.be.true;
-        
-        await myERC20.connect(addr2).approve(auction.address, ethers.parseEther("10"));
-        await myERC20.connect(addr2).transfer(auction.address, ethers.parseEther("10")); // 支付押金
-        expect(await auction.hasDeposited(addr2.address)).to.be.true;
+    const auction = await auctionManager.auctions(1);
 
-        await myERC20.connect(addr3).approve(auction.address, ethers.parseEther("10"));
-        await myERC20.connect(addr3).transfer(auction.address, ethers.parseEther("10")); // 支付押金
-        expect(await auction.hasDeposited(addr3.address)).to.be.true;
-    });
+    console.log(`Auction data:`, bidder1.address);
+    const hasBidder1Deposited = await auctionManager.hasDeposited(1, bidder1.address);
+    const hasBidder2Deposited = await auctionManager.hasDeposited(1, bidder2.address);
+    const hasBidder3Deposited = await auctionManager.hasDeposited(1, bidder3.address);
 
-    it("Should start the auction", async () => {
-        auction = await auctionFactory.auctions(0); // 获取拍卖合约地址
-        await auction.startAuction();
-        expect(await auction.started()).to.be.true;
-    });
+    expect(hasBidder1Deposited).to.be.true;
+    expect(hasBidder2Deposited).to.be.true;
+    expect(hasBidder3Deposited).to.be.true;
+  });
 
-    it("Should allow bidding", async () => {
-        await ethers.provider.send("evm_increaseTime", [60]); // 增加时间以便价格递减
-        await ethers.provider.send("evm_mine"); // 确保块被挖掘
-        
-        await auction.connect(addr1).bid(); // addr1 竞拍
+  it("should allow participants to place bids", async function () {
+    await auctionManager.connect(seller).createEnglishAuction(
+      startingPrice, 
+      reservePrice,  
+      auctionDuration, 
+      await myNFT.getAddress(), 
+      nftTokenId
+    );
 
-        // 检查拍卖结束
-        expect(await auction.ended()).to.be.true;
-        expect(await myNFT.ownerOf(1)).to.equal(addr1.address);
-    });
+    // bidder1 授权 ERC20 token
+    await myERC20Token.connect(bidder1).approve(await auctionManager.getAddress(), initialDeposit);
+    await auctionManager.connect(bidder1).deposit(1);
 
-    it("Should refund deposits", async () => {
-        // addr2 和 addr3 应该能取回押金
-        expect(await myERC20.balanceOf(addr2.address)).to.equal(ethers.parseEther("100"));
-        await auction.connect(addr2).claimRefund(); // addr2 取回押金
-        expect(await myERC20.balanceOf(addr2.address)).to.equal(ethers.parseEther("110"));
+    // bidder2 授权 ERC20 token
+    await myERC20Token.connect(bidder2).approve(await auctionManager.getAddress(), initialDeposit);
+    await auctionManager.connect(bidder2).deposit(1);
 
-        expect(await myERC20.balanceOf(addr3.address)).to.equal(ethers.parseEther("100"));
-        await auction.connect(addr3).claimRefund(); // addr3 取回押金
-        expect(await myERC20.balanceOf(addr3.address)).to.equal(ethers.parseEther("110"));
-    });
+    await auctionManager.connect(seller).startAuction(1);
 
-    it("Should check ERC20 balances after bidding", async () => {
-        // 检查 addr1 是否支付了代币
-        expect(await myERC20.balanceOf(addr1.address)).to.equal(ethers.parseEther("90")); // 10 代币已支付
-        expect(await myERC20.balanceOf(owner.address)).to.equal(ethers.parseEther("10")); // owner 收到的代币
-    });
+    // bidder1 竞标
+    const bidAmount1 = ethers.parseUnits("150", 18);
+    await auctionManager.connect(bidder1).bid(1, bidAmount1);
+
+    // bidder2 竞标
+    const bidAmount2 = ethers.parseUnits("200", 18);
+    await auctionManager.connect(bidder2).bid(1, bidAmount2);
+
+    const auction = await auctionManager.auctions(1);
+    expect(auction.englishAuction.currentBid).to.equal(bidAmount2);
+    expect(auction.highestBidder).to.equal(bidder2.address);
+  });
+
+  it("should end the auction and transfer NFT and funds", async function () {
+
+    // 授权 AuctionManager 合约可以转移卖家的 NFT
+    await myNFT.connect(seller).approve(await auctionManager.getAddress(), nftTokenId);
+
+    await auctionManager.connect(seller).createEnglishAuction(
+      startingPrice, 
+      reservePrice,  
+      auctionDuration, 
+      await myNFT.getAddress(), 
+      nftTokenId
+    );
+
+    // bidder1 授权 ERC20 token
+    await myERC20Token.connect(bidder1).approve(await auctionManager.getAddress(), initialDeposit);
+    await auctionManager.connect(bidder1).deposit(1);
+
+    // bidder2 授权 ERC20 token
+    await myERC20Token.connect(bidder2).approve(await auctionManager.getAddress(), initialDeposit);
+    await auctionManager.connect(bidder2).deposit(1);
+
+    // 开始拍卖
+    await auctionManager.connect(seller).startAuction(1);
+
+    // bidder1 竞标
+    const bidAmount1 = ethers.parseUnits("150", 18);
+    await auctionManager.connect(bidder1).bid(1, bidAmount1);
+    await myERC20Token.connect(bidder1).approve(await auctionManager.getAddress(), bidAmount1);
+
+    // bidder2 竞标
+    const bidAmount2 = ethers.parseUnits("200", 18);
+    const balanceBidder2BeforeBid = await myERC20Token.balanceOf(bidder2.address);
+    console.log(`Bidder2 Balance before bid: ${balanceBidder2BeforeBid.toString()}`);
+    await auctionManager.connect(bidder2).bid(1, bidAmount2);
+    await myERC20Token.connect(bidder2).approve(await auctionManager.getAddress(), bidAmount2);
+    const allowanceBidder2 = await myERC20Token.allowance(bidder2.address, await auctionManager.getAddress());
+    console.log(`Bidder2 approved ${allowanceBidder2.toString()} tokens for bidding`);
+
+    console.log("seller: " + seller.address);
+    console.log("bidder1: " + bidder1.address);
+    console.log("bidder2: " + bidder2.address);
+    console.log("auctionManager: " + await auctionManager.getAddress());
+    console.log("owner: " + owner.address);
+    
+
+    // 结束拍卖
+    await auctionManager.endAuction(1);
+
+    const auction = await auctionManager.auctions(1);
+    expect(auction.auctionStatus).to.equal(2); // 结束状态是 Ended
+    expect(auction.isPaymentTransferred).to.be.true;
+    expect(auction.isNFTTransferred).to.be.true;
+  });
+
+  it("should refund deposits for non-winning participants", async function () {
+    // 授权 AuctionManager 合约可以转移卖家的 NFT
+    await myNFT.connect(seller).approve(await auctionManager.getAddress(), nftTokenId);
+    await auctionManager.connect(seller).createEnglishAuction(
+      startingPrice, 
+      reservePrice,  
+      auctionDuration, 
+      await myNFT.getAddress(), 
+      nftTokenId
+    );
+
+    // bidder1 授权 ERC20 token
+    await myERC20Token.connect(bidder1).approve(await auctionManager.getAddress(), initialDeposit);
+    await auctionManager.connect(bidder1).deposit(1);
+
+    // bidder2 授权 ERC20 token
+    await myERC20Token.connect(bidder2).approve(await auctionManager.getAddress(), initialDeposit);
+    await auctionManager.connect(bidder2).deposit(1);
+
+
+    // 开始拍卖
+    await auctionManager.connect(seller).startAuction(1);
+
+    // bidder1 竞标
+    const bidAmount1 = ethers.parseUnits("150", 18);
+    await auctionManager.connect(bidder1).bid(1, bidAmount1);
+    await myERC20Token.connect(bidder1).approve(await auctionManager.getAddress(), bidAmount1);
+
+    // bidder2 竞标
+    const bidAmount2 = ethers.parseUnits("200", 18);
+    const balanceBidder2BeforeBid = await myERC20Token.balanceOf(bidder2.address);
+    console.log(`Bidder2 Balance before bid: ${balanceBidder2BeforeBid.toString()}`);
+    await auctionManager.connect(bidder2).bid(1, bidAmount2);
+    await myERC20Token.connect(bidder2).approve(await auctionManager.getAddress(), bidAmount2);
+    const allowanceBidder2 = await myERC20Token.allowance(bidder2.address, await auctionManager.getAddress());
+    console.log(`Bidder2 approved ${allowanceBidder2.toString()} tokens for bidding`);
+
+    console.log("seller: " + seller.address);
+    console.log("bidder1: " + bidder1.address);
+    console.log("bidder2: " + bidder2.address);
+    console.log("auctionManager: " + await auctionManager.getAddress());
+    console.log("owner: " + owner.address);
+
+    // 结束拍卖
+    await auctionManager.endAuction(1);
+
+    // bidder1 退还押金
+    await expect(auctionManager.connect(bidder1).refundDeposit(1))
+      .to.emit(auctionManager, "DepositRefunded")
+      .withArgs(bidder1.address, 1);
+
+    // bidder2 退还押金
+    await expect(auctionManager.connect(bidder2).refundDeposit(1))
+      .to.emit(auctionManager, "DepositRefunded")
+      .withArgs(bidder2.address, 1);
+  });
 });

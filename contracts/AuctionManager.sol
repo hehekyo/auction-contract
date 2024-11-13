@@ -172,7 +172,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
     ) public {
         auctionCount++;
         uint auctionId = auctionCount;
-
+        _auctionIdExist[auctionId] = true;
         // 初始化英式拍卖
         Auction storage newAuction = auctions[auctionId];
         newAuction.seller = msg.sender;
@@ -182,6 +182,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.depositAmount = 100; //_depositAmount;
         newAuction.auctionType = AuctionType.EnglishAuction;
         newAuction.duration = _duration;
+        newAuction.hasDeposited[msg.sender] = false;
 
         // 设置英式拍卖特有的字段
         newAuction.englishAuction.startingPrice = _startingPrice;
@@ -215,6 +216,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.depositAmount = 100; //_depositAmount;
         newAuction.auctionType = AuctionType.DutchAuction;
         newAuction.duration = _duration;
+        newAuction.hasDeposited[msg.sender] = false;
 
         // 设置荷兰拍卖特有的字段
         newAuction.dutchAuction.startingPrice = _startingPrice;
@@ -287,6 +289,10 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         emit DepositPaid(msg.sender, auctionId);
     }
 
+    function hasDeposited(uint256 auctionId, address user) external view returns (bool) {
+        return auctions[auctionId].hasDeposited[user];
+    }
+
     // 结束拍卖
     function endAuction(uint auctionId) public {
         require(_auctionIdExist[auctionId] == true, "Auction does not exist");
@@ -312,7 +318,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
 
 
         // 将拍卖款项转给卖家
-        require(myERC20Token.transfer(auction.seller, auction.finalPrice), "Transfer failed");
+        require(myERC20Token.transferFrom(auction.highestBidder, auction.seller, auction.finalPrice), "Transfer failed");
         // 转移NFT
         IERC721(auction.nftContract).safeTransferFrom(auction.seller, auction.highestBidder, auction.tokenId);
 
@@ -328,7 +334,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         require(auction.hasDeposited[msg.sender], "No deposit found");
 
         // 确保该用户没有成为赢家
-        require(msg.sender != auction.highestBidder, "Winner cannot refund deposit");
+        //require(msg.sender != auction.highestBidder, "Winner cannot refund deposit");
 
         auction.hasDeposited[msg.sender] = false;  // 标记押金已退还
 
