@@ -46,7 +46,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
     enum AuctionType { DutchAuction, EnglishAuction }
 
     // 定义拍卖状态
-    enum AuctionStatus { Registration, Ongoing, Ended }
+    enum AuctionStatus { Ongoing, Ended } //Registration,
 
     uint[] private auctions2End;
     uint[] private dutchAuctions2UpdatePrice;
@@ -178,7 +178,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.seller = msg.sender;
         newAuction.nftContract = _nftContract;
         newAuction.tokenId = _tokenId;
-        newAuction.auctionStatus = AuctionStatus.Registration;
+        newAuction.auctionStatus = AuctionStatus.Ongoing;
         newAuction.depositAmount = 100; //_depositAmount;
         newAuction.auctionType = AuctionType.EnglishAuction;
         newAuction.duration = _duration;
@@ -188,8 +188,10 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.englishAuction.startingPrice = _startingPrice;
         newAuction.englishAuction.reservePrice = _reservePrice;
         newAuction.englishAuction.currentBid = 0; // 初始时没有出价
+        newAuction.englishAuction.auctionEndTime = block.timestamp + newAuction.duration;
 
         emit AuctionCreated(msg.sender, auctionId);
+        emit AuctionStarted(auctionId, newAuction.englishAuction.auctionEndTime);
     }
 
     // 创建荷兰拍卖, 前端授权
@@ -212,7 +214,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.seller = msg.sender;
         newAuction.nftContract = _nftContract;
         newAuction.tokenId = _tokenId;
-        newAuction.auctionStatus = AuctionStatus.Registration;
+        newAuction.auctionStatus = AuctionStatus.Ongoing;
         newAuction.depositAmount = 100; //_depositAmount;
         newAuction.auctionType = AuctionType.DutchAuction;
         newAuction.duration = _duration;
@@ -224,10 +226,14 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         newAuction.dutchAuction.currentPrice = _startingPrice;
         newAuction.dutchAuction.priceDecrement = _priceDecrement;
         newAuction.dutchAuction.decrementInterval = _decrementInterval;
+        newAuction.dutchAuction.auctionEndTime = block.timestamp + newAuction.duration;
 
         emit AuctionCreated(msg.sender, auctionId);
+        emit AuctionStarted(auctionId, newAuction.dutchAuction.auctionEndTime);
     }
 
+    // not in use, combined in createxxxAuction
+    /*
     function startAuction(uint auctionId) public {
         require(_auctionIdExist[auctionId] == true, "Auction does not exist");
         Auction storage auction = auctions[auctionId];
@@ -247,6 +253,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
 
         emit AuctionStarted(auctionId, _endTime);
     }
+    */
 
     // 竞标
     function bid(uint auctionId, uint amount) public {
@@ -278,7 +285,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
 
         Auction storage auction = auctions[auctionId];
 
-        require(auction.auctionStatus == AuctionStatus.Registration || auction.auctionStatus == AuctionStatus.Ongoing, "Auction already started"); // 准备阶段 和 开始阶段都可以交押金
+        require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction already started"); // 准备阶段 和 开始阶段都可以交押金
 
         // 转账押金
         require(myERC20Token.transferFrom(msg.sender, address(this), auction.depositAmount), "Transfer failed");
@@ -399,6 +406,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
 
     function addAdmin(address newAdmin) public onlyRole(ADMIN_ROLE) {
         grantRole(ADMIN_ROLE, newAdmin);
+        // mint myERC20 代币给管理员？ 
     }
     function removeAdmin(address admin) public onlyRole(ADMIN_ROLE) {
         revokeRole(ADMIN_ROLE, admin);
