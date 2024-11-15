@@ -8,7 +8,10 @@
     "test:nft": "npx hardhat test test/MyNFT.test.js",
     "test:auction": "npx hardhat test test/AuctionManager.test.js",
     "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
-    "run:erc20": "npx hardhat run scripts/token-operations.js --network localhost"
+    "op:erc20": "npx hardhat run scripts/token-operations.js --network localhost",
+    "op:nft": "npx hardhat run scripts/nft-operations.js --network localhost",
+    "op:auction": "npx hardhat run scripts/auction-operations.js --network localhost",
+    "test:utils": "mocha utils/**/*.test.js"
   },
   "author": "",
   "license": "ISC",

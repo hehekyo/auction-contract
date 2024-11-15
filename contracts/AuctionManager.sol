@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.22;
 
 import "@chainlink/contracts/src/v0.8/automation/KeeperCompatible.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -33,15 +33,77 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     uint[] private dutchAuctions2UpdatePrice;
 
     // 拍卖事件
-    event AuctionStarted(uint auctionId, uint endTime);
-    event AuctionEnded(uint auctionId, address winner, uint finalPrice);
-    event DepositPaid(address indexed participant, uint indexed auctionId, uint amount);
-    event DepositRefunded(address indexed participant, uint indexed auctionId, uint amount);
-    event AuctionCreated(address creator, uint auctionId);
-    event BidPlaced(uint auctionId, address bidder, uint currentPrice);
-    event AuctionFailed(uint indexed auctionId);
-    event PaymentTransferred(uint auctionId);
-    event NFTTransferred(uint auctionId);
+    event AuctionCreated(
+        uint indexed auctionId,
+        address indexed seller,
+        address indexed nftContract,
+        uint256 tokenId,
+        AuctionType auctionType,
+        uint256 startingPrice,
+        uint256 reservePrice,
+        uint256 duration,
+        uint256 depositAmount
+    );
+
+    event AuctionStarted(
+        uint indexed auctionId,
+        uint256 startTime,
+        uint256 endTime,
+        uint256 startingPrice
+    );
+
+    event AuctionEnded(
+        uint indexed auctionId, 
+        address indexed winner,
+        uint256 finalPrice,
+        uint256 endTime
+    );
+
+    event BidPlaced(
+        uint indexed auctionId,
+        address indexed bidder,
+        uint256 bidAmount,
+        uint256 timestamp
+    );
+
+    event DutchAuctionPriceUpdated(
+        uint indexed auctionId,
+        uint256 oldPrice,
+        uint256 newPrice,
+        uint256 timestamp
+    );
+
+    event DepositHandled(
+        uint indexed auctionId,
+        address indexed participant,
+        uint256 amount,
+        bool isDeposit,  // true for deposit, false for refund
+        uint256 timestamp
+    );
+
+    event AuctionCancelled(
+        uint indexed auctionId,
+        address indexed canceller,
+        string reason,
+        uint256 timestamp
+    );
+
+    event PaymentSettled(
+        uint indexed auctionId,
+        address indexed seller,
+        address indexed buyer,
+        uint256 amount,
+        uint256 timestamp
+    );
+
+    event NFTTransferred(
+        uint indexed auctionId,
+        address indexed from,
+        address indexed to,
+        address nftContract,
+        uint256 tokenId,
+        uint256 timestamp
+    );
 
     IERC20 public myERC20Token;
 
@@ -170,8 +232,8 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             newAuction.dutchAuction.lastUpdateTime = block.timestamp;
         }
 
-        emit AuctionCreated(msg.sender, auctionId);
-        emit AuctionStarted(auctionId, _endTime);
+        emit AuctionCreated(auctionId, msg.sender, nftContract, tokenId, auctionType, startingPrice, reservePrice, duration, depositAmount);
+        emit AuctionStarted(auctionId, block.timestamp, _endTime, startingPrice);
     }
 
     // 竞标
@@ -209,7 +271,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             auction.highestBidder = msg.sender;
             auction.finalPrice = amount;
             
-            emit BidPlaced(auctionId, msg.sender, amount);
+            emit BidPlaced(auctionId, msg.sender, amount, block.timestamp);
 
         } else {
             // 英式拍卖检查
@@ -237,7 +299,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             auction.englishAuction.currentBid = amount;
             auction.highestBidder = msg.sender;
             
-            emit BidPlaced(auctionId, msg.sender, amount);
+            emit BidPlaced(auctionId, msg.sender, amount, block.timestamp);
         }
 
         // 转移竞标金额到合约
@@ -290,7 +352,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         auction.hasDeposited[msg.sender] = true;
 
         // 触发事件
-        emit DepositPaid(msg.sender, auctionId, depositAmount);
+        emit DepositHandled(auctionId, msg.sender, depositAmount, true, block.timestamp);
     }
 
     // 结束拍卖
@@ -324,7 +386,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         if (highestBidder == address(0)) {
             // 无人出价，拍卖失败
             auction.auctionStatus = AuctionStatus.Ended;
-            emit AuctionFailed(auctionId);
+            emit AuctionCancelled(auctionId, msg.sender, "No bids", block.timestamp);
             return;
         }
 
@@ -355,11 +417,11 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         // 先转移代币，再移NFT（防止重入攻）
         require(myERC20Token.transfer(auction.seller, auction.finalPrice), 
             "Payment transfer failed");
-        emit PaymentTransferred(auctionId);
+        emit PaymentSettled(auctionId, auction.seller, auction.highestBidder, auction.finalPrice, block.timestamp);
 
         // 转移NFT
         try nftContract.safeTransferFrom(auction.seller, auction.highestBidder, auction.tokenId) {
-            emit NFTTransferred(auctionId);
+            emit NFTTransferred(auctionId, auction.seller, auction.highestBidder, auction.nftContract, auction.tokenId, block.timestamp);
         } catch {
             // NFT转移失败，回滚支付
             require(myERC20Token.transfer(address(this), auction.finalPrice), 
@@ -370,7 +432,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             revert("NFT transfer failed");
         }
 
-        emit AuctionEnded(auctionId, auction.highestBidder, auction.finalPrice);
+        emit AuctionEnded(auctionId, auction.highestBidder, auction.finalPrice, endTime);
     }
 
     // 添加访问控制
@@ -399,7 +461,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             }
         }
         
-        emit AuctionFailed(auctionId);
+        emit AuctionCancelled(auctionId, msg.sender, "Emergency cancellation", block.timestamp);
     }
 
     function refundDeposit(uint auctionId) public nonReentrant {
@@ -434,7 +496,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         bool success = myERC20Token.transfer(msg.sender, depositAmount);
         require(success, "Transfer failed");
 
-        emit DepositRefunded(msg.sender, auctionId, depositAmount);
+        emit DepositHandled(auctionId, msg.sender, depositAmount, false, block.timestamp);
     }
 
     // 添加批量退还押金功能（管理员使用）
@@ -458,7 +520,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
                 bool success = myERC20Token.transfer(depositor, depositAmount);
                 require(success, "Transfer failed");
                 
-                emit DepositRefunded(depositor, auctionId, depositAmount);
+                emit DepositHandled(auctionId, depositor, depositAmount, false, block.timestamp);
             }
         }
     }
