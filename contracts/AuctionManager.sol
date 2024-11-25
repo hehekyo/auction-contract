@@ -24,8 +24,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     }
 
     // 定义拍卖类型
-    enum AuctionType { DutchAuction, EnglishAuction }
-
+    enum AuctionType { EnglishAuction,DutchAuction}
     // 定义拍卖状态
     enum AuctionStatus { Registration, Ongoing, Ended }
 
@@ -33,23 +32,18 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     uint[] private dutchAuctions2UpdatePrice;
 
     // 拍卖事件
-    event AuctionCreated(
-        uint indexed auctionId,
+    event AuctionStarted(
+        uint256 indexed auctionId,
         address indexed seller,
-        address indexed nftContract,
+        address nftContract,
         uint256 tokenId,
         AuctionType auctionType,
         uint256 startingPrice,
         uint256 reservePrice,
         uint256 duration,
-        uint256 depositAmount
-    );
-
-    event AuctionStarted(
-        uint indexed auctionId,
+        uint256 depositAmount,
         uint256 startTime,
-        uint256 endTime,
-        uint256 startingPrice
+        uint256 endTime
     );
 
     event AuctionEnded(
@@ -232,8 +226,19 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             newAuction.dutchAuction.lastUpdateTime = block.timestamp;
         }
 
-        emit AuctionCreated(auctionId, msg.sender, nftContract, tokenId, auctionType, startingPrice, reservePrice, duration, depositAmount);
-        emit AuctionStarted(auctionId, block.timestamp, _endTime, startingPrice);
+        emit AuctionStarted(
+            auctionId,
+            msg.sender,
+            nftContract,
+            tokenId,
+            auctionType,
+            startingPrice,
+            reservePrice,
+            duration,
+            depositAmount,
+            block.timestamp,
+            _endTime
+        );
     }
 
     // 竞标

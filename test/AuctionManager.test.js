@@ -64,7 +64,7 @@ describe("拍卖管理合约测试", function () {
       
       // 监听事件
       const tx = await auctionManager.connect(seller).startAuction(
-        1, // EnglishAuction
+        0, // EnglishAuction = 0
         startingPrice,
         reservePrice,
         duration,
@@ -75,9 +75,16 @@ describe("拍卖管理合约测试", function () {
       );
       const receipt = await tx.wait();
       
-      // 验证事件是否存在
+      // 修改事件验证方式
       const event = receipt.logs.find(
-        log => log.fragment && log.fragment.name === 'AuctionCreated'
+        log => {
+          try {
+            const parsed = auctionManager.interface.parseLog(log);
+            return parsed && parsed.name === 'AuctionStarted';  // 修改事件名称
+          } catch {
+            return false;
+          }
+        }
       );
       expect(event).to.not.be.undefined;
     });
@@ -88,7 +95,7 @@ describe("拍卖管理合约测试", function () {
 
       // 创建拍卖
       await (await auctionManager.connect(seller).startAuction(
-        1,
+        0, // EnglishAuction = 0
         startingPrice,
         reservePrice,
         duration,
@@ -127,7 +134,7 @@ describe("拍卖管理合约测试", function () {
     it("成功创建荷兰拍卖", async function () {
       const myNFTAddress = await myNFT.getAddress();
       const tx = await auctionManager.connect(seller).startAuction(
-        0,
+        1, // DutchAuction = 1
         startingPrice,
         endPrice,
         duration,
@@ -138,8 +145,16 @@ describe("拍卖管理合约测试", function () {
       );
       const receipt = await tx.wait();
       
+      // 修改事件验证方式
       const event = receipt.logs.find(
-        log => log.fragment && log.fragment.name === 'AuctionCreated'
+        log => {
+          try {
+            const parsed = auctionManager.interface.parseLog(log);
+            return parsed && parsed.name === 'AuctionStarted';  // 修改事件名称
+          } catch {
+            return false;
+          }
+        }
       );
       expect(event).to.not.be.undefined;
     });
@@ -153,7 +168,7 @@ describe("拍卖管理合约测试", function () {
 
       // 创建拍卖
       const createTx = await auctionManager.connect(seller).startAuction(
-        0, // DutchAuction
+        1, // DutchAuction = 1
         startingPrice,
         endPrice,
         duration,
@@ -189,14 +204,10 @@ describe("拍卖管理合约测试", function () {
   describe("紧急功能测试", function () {
     it("管理员可以紧急取消拍卖", async function () {
       const myNFTAddress = await myNFT.getAddress();
-      const auctionManagerAddress = await auctionManager.getAddress();
-      
-      // 先授权NFT转移
-      await (await myNFT.connect(seller).setApprovalForAll(auctionManagerAddress, true)).wait();
       
       // 创建拍卖
-      await (await auctionManager.connect(seller).startAuction(
-        1,
+      await auctionManager.connect(seller).startAuction(
+        0,
         ethers.parseEther("100"),
         ethers.parseEther("80"),
         3600,
@@ -204,16 +215,17 @@ describe("拍卖管理合约测试", function () {
         0,
         0,
         0
-      )).wait();
-
-      // 管理员取消拍卖
-      const tx = await auctionManager.connect(admin).emergencyCancelAuction(1);
-      const receipt = await tx.wait();
-      
-      const event = receipt.logs.find(
-        log => log.fragment && log.fragment.name === 'AuctionFailed'
       );
-      expect(event).to.not.be.undefined;
+
+      // 修改事件验证，匹配合约中的事件定义
+      await expect(auctionManager.connect(admin).emergencyCancelAuction(1))
+        .to.emit(auctionManager, 'AuctionCancelled')
+        .withArgs(
+          1,                    // uint indexed auctionId
+          admin.address,        // address indexed canceller
+          "Emergency cancellation",  // string reason
+          await time.latest()   // uint256 timestamp
+        );
     });
   });
 })

@@ -31,7 +31,12 @@ describe("Auction System", function () {
         MyNFT = await ethers.getContractFactory("MyNFT");
 
         // 部署代币合约
-        myERC20 = await MyERC20.deploy(INITIAL_TOKEN_SUPPLY);
+        myERC20 = await MyERC20.deploy(
+            "TestToken", 
+            "TT", 
+            INITIAL_TOKEN_SUPPLY,
+            { gasLimit: 3000000 }
+        );
         await myERC20.waitForDeployment();
 
         // 部署NFT合约

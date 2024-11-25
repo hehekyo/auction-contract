@@ -3,15 +3,19 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "npx hardhat node",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:erc20": "npx hardhat test test/MyERC20.test.js",
     "test:nft": "npx hardhat test test/MyNFT.test.js",
     "test:auction": "npx hardhat test test/AuctionManager.test.js",
-    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
     "op:erc20": "npx hardhat run scripts/token-operations.js --network localhost",
     "op:nft": "npx hardhat run scripts/nft-operations.js --network localhost",
-    "op:auction": "npx hardhat run scripts/auction-operations.js --network localhost",
-    "test:utils": "mocha utils/**/*.test.js"
+    "op": "npx hardhat run scripts/auction-operations.js --network localhost",
+    "test:utils": "mocha utils/**/*.test.js",
+    "deploy": "npx hardhat run scripts/deploy-dev.js --network localhost",
+    "transfer": "npx hardhat run scripts/transfer-dev.js --network localhost",
+    "auction:info": "npx hardhat run scripts/show-info.ts --network localhost",
+    "auction:events": "npx hardhat run scripts/query-auction-events.ts --network localhost"
   },
   "author": "",
   "license": "ISC",

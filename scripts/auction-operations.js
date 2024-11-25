@@ -2,20 +2,18 @@ const { ethers } = require("hardhat");
 const { getDeployedAddresses } = require("../utils/address-helper");
 
 async function main() {
-    // 获取签名者账户
     const [owner, addr1, addr2] = await ethers.getSigners();
-    
-    // 获取部署的地址
     const addresses = getDeployedAddresses();
-    
-    // 检查所有必需的合约地址
+
+    // 检查合约地址
     if (!addresses.MyNFT || !addresses.MyToken || !addresses.AuctionManager) {
-        console.error("合约地址未找到：");
-        console.error("MyNFT:", addresses.MyNFT);
-        console.error("MyToken:", addresses.MyToken);
-        console.error("AuctionManager:", addresses.AuctionManager);
-        throw new Error("请先部署所有合约！");
+        console.error("合约地址未找到");
+        process.exit(1);
     }
+
+    const myNFTAddress = addresses.MyNFT;
+    const myTokenAddress = addresses.MyToken;
+    const auctionManagerAddress = addresses.AuctionManager;
 
     try {
         // 获取合约实例
@@ -23,120 +21,224 @@ async function main() {
         const MyToken = await ethers.getContractFactory("MyERC20");
         const AuctionManager = await ethers.getContractFactory("AuctionManager");
 
-        // 连接到已部署的合约
-        const myNFT = MyNFT.attach(addresses.MyNFT);
-        const myToken = MyToken.attach(addresses.MyToken);
-        const auctionManager = AuctionManager.attach(addresses.AuctionManager);
+        const myNFT = MyNFT.attach(myNFTAddress);
+        const myToken = MyToken.attach(myTokenAddress);
+        const auctionManager = AuctionManager.attach(auctionManagerAddress);
 
-        // 验证合约连接
-        try {
-            await myNFT.name();
-            await myToken.name();
-            await auctionManager.owner();
-            console.log("合约连接验证成功");
-        } catch (error) {
-            console.error("合约连接失败，请确保地址正确且合约已部署");
-            throw error;
-        }
-
-        console.log("\n=== 合约地址 ===");
-        console.log("NFT 合约:", await myNFT.getAddress());
-        console.log("代币合约:", await myToken.getAddress());
-        console.log("拍卖管理合约:", await auctionManager.getAddress());
-
-        // 检查 NFT 授权
-        console.log("\n=== 检查 NFT 授权 ===");
-        const auctionManagerAddress = await auctionManager.getAddress();
-        const isApproved = await myNFT.isApprovedForAll(
-            owner.address, 
-            auctionManagerAddress
-        );
+        // 铸造 NFT (总共30个，然后分配)
+        console.log("\n=== 铸造和分配 NFT ===");
         
-        if (!isApproved) {
-            console.log("授权 NFT 给拍卖合约...");
-            const approveTx = await myNFT.setApprovalForAll(auctionManagerAddress, true);
-            await approveTx.wait();
-            console.log("NFT 授权完成");
-        } else {
-            console.log("NFT 已授权给拍卖合约");
-        }
-
-        // 铸造 NFT
-        console.log("\n=== 铸造 NFT ===");
+        // owner 铸造 NFT
+        const nftIds = [];
         
-        // 获取当前的 tokenCounter
-        const currentTokenId = await myNFT.tokenCounter();
-        console.log("当前 Token ID:", currentTokenId.toString());
-
-        // 尝试使用另一个 mint 函数 (只需要 imageURI 的版本)
-        console.log("铸造 NFT #0...");
-        const mintTx1 = await myNFT.mint("ipfs://token-uri-0");
-        await mintTx1.wait();
-        console.log("NFT #0 铸造成功");
-
-        console.log("铸造 NFT #1...");
-        const mintTx2 = await myNFT.mint("ipfs://token-uri-1");
-        await mintTx2.wait();
-        console.log("NFT #1 铸造成功");
-
-        // 创建荷兰式拍卖
-        console.log("\n=== 创建荷兰式拍卖 ===");
-        const nftAddress = await myNFT.getAddress();
-        
-        const dutchAuctionParams = {
-            auctionType: 0, // DutchAuction
-            startingPrice: ethers.parseEther("100"),  // 起拍价 100 代币
-            reservePrice: ethers.parseEther("50"),    // 保留价 50 代币
-            duration: 3600,                           // 持续时间 1 小时
-            nftContract: nftAddress,                  // 使用 getAddress() 获取的地址
-            tokenId: 0,                               // NFT #0
-            priceDecrement: ethers.parseEther("5"),   // 每次降价 5 代币
-            decrementInterval: 300                    // 每 5 分钟降价一次
-        };
-
-        console.log("创建荷兰式拍卖...");
-        const dutchTx = await auctionManager.startAuction(
-            dutchAuctionParams.auctionType,
-            dutchAuctionParams.startingPrice,
-            dutchAuctionParams.reservePrice,
-            dutchAuctionParams.duration,
-            dutchAuctionParams.nftContract,
-            dutchAuctionParams.tokenId,
-            dutchAuctionParams.priceDecrement,
-            dutchAuctionParams.decrementInterval
-        );
-        const dutchReceipt = await dutchTx.wait();
-        // 添加事件日志打印
-        console.log("\n荷兰式拍卖事件日志:");
-        for (const event of dutchReceipt.logs) {
+        // 等待每个NFT铸造完成后再继续
+        for(let i = 0; i < 30; i++) {
             try {
-                const parsedEvent = auctionManager.interface.parseLog(event);
-                if (parsedEvent) {
-                    console.log(`事件名称: ${parsedEvent.name}`);
-                    console.log("事件参数:", parsedEvent.args);
+                const tx = await myNFT.connect(owner).mint(`ipfs://token-uri-${i}`);
+                const receipt = await tx.wait();
+                
+                // 验证NFT确实被铸造
+                const tokenId = i;
+                const currentOwner = await myNFT.ownerOf(tokenId);
+                if (currentOwner !== owner.address) {
+                    throw new Error(`NFT #${tokenId} 铸造验证失败`);
                 }
+                
+                nftIds.push(tokenId);
+                console.log(`铸造 NFT #${tokenId} 成功，所有者: ${currentOwner}`);
             } catch (error) {
-                // 跳过无法解析的日志
+                console.error(`铸造 NFT ${i} 失败:`, error);
+                throw error;
+            }
+        }
+        
+        console.log("NFT 铸造完成，开始分配...");
+
+        // 分配给 addr1 (前10个)
+        for(let i = 10; i < 20; i++) {
+            try {
+                // 确保NFT存在并且owner拥有它
+                const tokenId = nftIds[i];
+                const currentOwner = await myNFT.ownerOf(tokenId);
+                
+                if (currentOwner !== owner.address) {
+                    console.log(`跳过 NFT #${tokenId}，当前有者不是owner`);
+                    continue;
+                }
+
+                console.log(`转移 NFT #${tokenId} 给 addr1...`);
+                const tx = await myNFT.connect(owner)["safeTransferFrom(address,address,uint256)"](
+                    owner.address,
+                    addr1.address,
+                    tokenId
+                );
+                await tx.wait();
+                
+                // 验证转移
+                const newOwner = await myNFT.ownerOf(tokenId);
+                console.log(`NFT #${tokenId} 转移成功，新所有者: ${newOwner}`);
+            } catch (error) {
+                console.error(`转移 NFT ${nftIds[i]} 给 addr1 失败:`, error);
+                // 继续处理下一个，而不是直接抛出错误
                 continue;
             }
         }
-        console.log("荷兰式拍卖创建成功");
 
-        // 创建英式拍卖
-        console.log("\n=== 创建英式拍卖 ===");
-        const englishAuctionParams = {
-            auctionType: 1, // EnglishAuction
-            startingPrice: ethers.parseEther("80"),   // 起拍价 80 代币
-            reservePrice: ethers.parseEther("40"),    // 保留价 40 代币
-            duration: 7200,                           // 持续时间 2 小时
-            nftContract: nftAddress,                  // 使用同一个 nftAddress
-            tokenId: 1,                               // NFT #1
-            priceDecrement: 0,                        // 英式拍卖不需要降价参数
-            decrementInterval: 0                      // 英式拍卖不需要降价间隔
+        // 分配给 addr2 (后10个)
+        for(let i = 20; i < 30; i++) {
+            try {
+                console.log(`尝试转移 NFT #${nftIds[i]} 给 addr2...`);
+                
+                // 检查当前所有者
+                const currentOwner = await myNFT.ownerOf(nftIds[i]);
+                console.log(`当前所有者: ${currentOwner}`);
+                
+                // 找到对应的签名者
+                let currentOwnerSigner;
+                if(currentOwner === owner.address) {
+                    currentOwnerSigner = owner;
+                } else if(currentOwner === addr1.address) {
+                    currentOwnerSigner = addr1;
+                } else if(currentOwner === addr2.address) {
+                    currentOwnerSigner = addr2;
+                } else {
+                    throw new Error(`未知的 NFT 所有者: ${currentOwner}`);
+                }
+                
+                // 使用当前所有者的签名者转移
+                console.log(`从当前所有者转移 NFT #${nftIds[i]} 给 addr2...`);
+                const tx = await myNFT.connect(currentOwnerSigner)["safeTransferFrom(address,address,uint256)"](
+                    currentOwner,
+                    addr2.address,
+                    nftIds[i]
+                );
+                await tx.wait();
+                console.log(`转移 NFT #${nftIds[i]} 给 addr2 成功`);
+                
+                // 验证新的所有者
+                const newOwner = await myNFT.ownerOf(nftIds[i]);
+                console.log(`新的所有者: ${newOwner}`);
+            } catch (error) {
+                console.error(`转移 NFT ${nftIds[i]} 给 addr2 失败:`, error);
+                throw error;
+            }
+        }
+
+        console.log("NFT 分配完成");
+
+        // 铸造代币给参与拍卖的用户
+        console.log("\n=== 铸造和分配代币 ===");
+        
+        // 给每个用户铸造 1 个代币
+        const mintAmount = ethers.parseEther("1.0");
+        
+        console.log("给 owner 铸造代币...");
+        let mintTx = await myToken.connect(owner).mint(owner.address, mintAmount);
+        await mintTx.wait();
+        console.log(`owner 代币余额: ${ethers.formatEther(await myToken.balanceOf(owner.address))}`);
+        
+        console.log("\n给 addr1 铸造代币...");
+        mintTx = await myToken.connect(owner).mint(addr1.address, mintAmount);
+        await mintTx.wait();
+        console.log(`addr1 代币余额: ${ethers.formatEther(await myToken.balanceOf(addr1.address))}`);
+        
+        console.log("\n给 addr2 铸造代币...");
+        mintTx = await myToken.connect(owner).mint(addr2.address, mintAmount);
+        await mintTx.wait();
+        console.log(`addr2 代币余额: ${ethers.formatEther(await myToken.balanceOf(addr2.address))}`);
+
+        // 创建示例拍卖（使用较小的金额）
+        console.log("\n=== 创建示例拍卖 ===");
+        
+        // 用于存储拍卖ID
+        let dutchAuctionId, englishAuctionId;
+        
+        // 荷兰式拍卖参数
+        const dutchAuctionParams = {
+            auctionType: 1, // DutchAuction
+            startingPrice: ethers.parseEther("0.1"),   // 起拍价 0.1 代币
+            reservePrice: ethers.parseEther("0.01"),   // 保留价 0.01 代币
+            duration: 3600,                            // 1小时
+            nftContract: await myNFT.getAddress(),
+            tokenId: nftIds[0],                        // owner的第一个NFT
+            priceDecrement: ethers.parseEther("0.01"), // 每次降价 0.01 代币
+            decrementInterval: 300                     // 每5分钟降价一次
         };
 
+        // 先授权 NFT 给拍卖合约
+        console.log("授权 NFT 给拍卖合约...");
+        let approveTx = await myNFT.connect(owner).approve(auctionManagerAddress, dutchAuctionParams.tokenId);
+        await approveTx.wait();
+        console.log("NFT 授权完成");
+
+        // // 创建荷兰式拍卖
+        // console.log("创建荷兰式拍卖...");
+        // let tx = await auctionManager.connect(owner).startAuction(
+        //     dutchAuctionParams.auctionType,
+        //     dutchAuctionParams.startingPrice,
+        //     dutchAuctionParams.reservePrice,
+        //     dutchAuctionParams.duration,
+        //     dutchAuctionParams.nftContract,
+        //     dutchAuctionParams.tokenId,
+        //     dutchAuctionParams.priceDecrement,
+        //     dutchAuctionParams.decrementInterval
+        // );
+        // let receipt = await tx.wait();
+        
+        // // 修改获取荷兰拍卖ID的部分
+        // console.log("解析事件日志...");
+        // let foundAuctionId = false;
+        // for (const log of receipt.logs) {
+        //     // 打印日志信息以便调试
+        //     console.log("处理日志:", log);
+            
+        //     try {
+        //         // 尝试解析日志
+        //         const parsedLog = auctionManager.interface.parseLog({
+        //             topics: log.topics,
+        //             data: log.data
+        //         });
+                
+        //         console.log("解析的日志:", parsedLog);
+                
+        //         if (parsedLog && parsedLog.name === 'AuctionCreated') {
+        //             dutchAuctionId = parsedLog.args[0]; // 直接获取第一个参数
+        //             console.log(`荷兰拍卖创建成功，拍卖ID: ${dutchAuctionId}`);
+        //             foundAuctionId = true;
+        //             break;
+        //         }
+        //     } catch (error) {
+        //         console.log("解析日志失败:", error.message);
+        //         continue;
+        //     }
+        // }
+
+        // if (!foundAuctionId) {
+        //     console.log("完整的交易收据:", receipt);
+        //     throw new Error("未能获取荷兰拍卖ID");
+        // }
+
+        // 英式拍卖参数
+        const englishAuctionParams = {
+            auctionType: 0, // EnglishAuction
+            startingPrice: ethers.parseEther("0.05"),  // 起拍价 0.05 代币
+            reservePrice: ethers.parseEther("0.01"),   // 保留价 0.01 代币
+            duration: 3600,                            // 1小时
+            nftContract: await myNFT.getAddress(),
+            tokenId: nftIds[10],                       // addr1的第一个NFT
+            priceDecrement: 0,                         // 英式拍卖不需要
+            decrementInterval: 0                       // 英式拍卖不需要
+        };
+
+        // 先授权 NFT 给拍卖合约
+        console.log("\n授权 NFT 给拍卖合约...");
+        approveTx = await myNFT.connect(addr1).approve(auctionManagerAddress, englishAuctionParams.tokenId);
+        await approveTx.wait();
+        console.log("NFT 授权完成");
+
+        // 创建英式拍卖
         console.log("创建英式拍卖...");
-        const englishTx = await auctionManager.startAuction(
+        tx = await auctionManager.connect(addr1).startAuction(
             englishAuctionParams.auctionType,
             englishAuctionParams.startingPrice,
             englishAuctionParams.reservePrice,
@@ -146,186 +248,232 @@ async function main() {
             englishAuctionParams.priceDecrement,
             englishAuctionParams.decrementInterval
         );
-        await englishTx.wait();
-        console.log("英式拍卖创建成功");
-
-        // 显示拍卖信息
-        const dutchAuctionId = 1;
-        const englishAuctionId = 2;
-
-        async function displayAuctionInfo(auctionId, auctionType) {
-            const auction = await auctionManager.auctions(auctionId);
-            console.log(`\n${auctionType}拍卖信息 (ID: ${auctionId}):`);
-            console.log("卖家:", auction.seller);
-            console.log("NFT 合约:", auction.nftContract);
-            console.log("Token ID:", auction.tokenId);
-            console.log("拍卖状态:", auction.auctionStatus);
-            console.log("押金金额:", ethers.formatEther(auction.depositAmount), "代币");
-            
-            if (auctionType === "荷兰式") {
-                const currentPrice = await auctionManager.getCurrentPrice(auctionId);
-                console.log("当前价格:", ethers.formatEther(currentPrice), "代币");
+        receipt = await tx.wait();
+        
+        // 修改获取英式拍卖ID的部分
+        console.log("解析事件日志...");
+        let foundAuctionId = false;
+        for (const log of receipt.logs) {
+            try {
+                // 尝试解析日志
+                const parsedLog = auctionManager.interface.parseLog({
+                    topics: log.topics,
+                    data: log.data
+                });
+                
+                console.log("解析的日志:", parsedLog);
+                
+                // 使用 AuctionStarted 事件名称
+                if (parsedLog && parsedLog.name === 'AuctionStarted') {
+                    englishAuctionId = parsedLog.args[0]; // auctionId 是第一个参数
+                    console.log(`英式拍卖创建成功，拍卖ID: ${englishAuctionId}`);
+                    foundAuctionId = true;
+                    break;
+                }
+            } catch (error) {
+                console.log("解析日志失败:", error.message);
+                continue;
             }
         }
 
-        await displayAuctionInfo(dutchAuctionId, "荷兰式");
-        await displayAuctionInfo(englishAuctionId, "英式");
+        if (!foundAuctionId) {
+            console.log("完整的交易收据:", receipt);
+            throw new Error("未能获取英式拍卖ID");
+        }
 
-        // 模拟用户参与拍卖
-        console.log("\n=== 用户参与拍卖 ===");
-        
-        // 先给用户铸造代币
-        console.log("给用户铸造代币...");
-        const mintAmount = ethers.parseEther("10000"); // 铸造 10000 代币
-        await myToken.mint(addr1.address, mintAmount);
-        await myToken.mint(addr2.address, mintAmount);
-        console.log("代币铸造完成");
-        
-        // 显示用户代币余额
-        const addr1Balance = await myToken.balanceOf(addr1.address);
-        const addr2Balance = await myToken.balanceOf(addr2.address);
-        console.log("用户1代币余额:", ethers.formatEther(addr1Balance));
-        console.log("用户2代币余额:", ethers.formatEther(addr2Balance));
-        
-        // 获取拍卖管理合约地址
-        const auctionManagerAddr = await auctionManager.getAddress();
-        
-        // 授币
-        const tokenAmount = ethers.parseEther("1000");
-        await myToken.connect(addr1).approve(auctionManagerAddr, tokenAmount);
-        await myToken.connect(addr2).approve(auctionManagerAddr, tokenAmount);
-        console.log("用户代币授权完成");
+        // 进行出价
+        console.log("\n=== 进行出价测试 ===");
 
-        // 用户1参与荷兰式拍卖
-        console.log("\n用户1参与荷兰式拍卖...");
+        // 为英式拍卖出价
+        console.log("\n英式拍卖出价测试：");
         
-        try {
-            console.log("支付押金...");
-            await auctionManager.connect(addr1).deposit(dutchAuctionId);
-            console.log("用户1支付押金完成");
-        } catch (error) {
-            if (error.message.includes("Already deposited")) {
-                console.log("用户1已支付押金");
-            } else {
-                throw error;
+        // addr2 出价 0.06 代币
+        const englishBidAmount1 = ethers.parseEther("0.06");
+        console.log("addr2 出价 0.06 代币...");
+        
+        // 先授权代币用于保证金
+        console.log("授权代币用于保证金...");
+        const depositAmount = ethers.parseEther("0.01"); // 假设保证金是 0.01 币
+        await myToken.connect(addr2).approve(auctionManagerAddress, depositAmount);
+        console.log("保证金代币授权完成");
+        
+        // 支付保证金
+        console.log("支付保证金...");
+        tx = await auctionManager.connect(addr2).deposit(englishAuctionId);
+        receipt = await tx.wait();
+        console.log("保证金支付完成");
+        
+        // 授权代币用于出价
+        console.log("授权代币用于出价...");
+        await myToken.connect(addr2).approve(auctionManagerAddress, englishBidAmount1);
+        console.log("出价代币授权完成");
+        
+        // 出价
+        console.log("提交出价...");
+        tx = await auctionManager.connect(addr2).bid(englishAuctionId, englishBidAmount1);
+        receipt = await tx.wait();
+        
+        // 打印出价事件
+        for (const log of receipt.logs) {
+            try {
+                const parsedLog = auctionManager.interface.parseLog(log);
+                if (parsedLog?.name === 'BidPlaced') {
+                    console.log(`出价成功：
+                    - 出价者: ${parsedLog.args.bidder}
+                    - 金额: ${ethers.formatEther(parsedLog.args.currentPrice)} 代币`);
+                    break;
+                }
+            } catch (error) {
+                continue;
             }
         }
-        
-        // 获取并显示当前价格
-        const dutchCurrentPrice = await auctionManager.getCurrentPrice(dutchAuctionId);
-        console.log("当前荷兰式拍卖价格:", ethers.formatEther(dutchCurrentPrice), "代币");
-        
-        // // 使用确切的当前价格进行出价
-        // console.log("用户1出价:", ethers.formatEther(dutchCurrentPrice), "代币");
-        // await auctionManager.connect(addr1).bid(dutchAuctionId, dutchCurrentPrice);
-        // console.log("用户1出价成功");
 
-        // 用户2参与英式拍卖
-        console.log("\n用户2参与英式拍卖...");
+        // owner 出价 0.07 代币
+        const englishBidAmount2 = ethers.parseEther("0.07");
+        console.log("\nowner 出价 0.07 代币...");
         
-        try {
-            console.log("支付押金...");
-            await auctionManager.connect(addr2).deposit(englishAuctionId);
-            console.log("用户2支付押金完成");
-        } catch (error) {
-            if (error.message.includes("Already deposited")) {
-                console.log("用户2已支付押金");
-            } else {
-                throw error;
+        // 先授权代币用于保证金
+        console.log("授权代币用于保证金...");
+        await myToken.connect(owner).approve(auctionManagerAddress, depositAmount);
+        console.log("保证金代币授权完成");
+        
+        // 支付保证金
+        console.log("支付保证金...");
+        tx = await auctionManager.connect(owner).deposit(englishAuctionId);
+        receipt = await tx.wait();
+        console.log("保证金支付完成");
+        
+        // 授权代币用于出价
+        console.log("授权代币用于出价...");
+        await myToken.connect(owner).approve(auctionManagerAddress, englishBidAmount2);
+        console.log("出价代币授权完成");
+        
+        // 出价
+        tx = await auctionManager.connect(owner).bid(englishAuctionId, englishBidAmount2);
+        receipt = await tx.wait();
+        
+        // 打印出价事件
+        for (const log of receipt.logs) {
+            try {
+                const parsedLog = auctionManager.interface.parseLog(log);
+                if (parsedLog?.name === 'BidPlaced') {
+                    console.log(`出价成功：
+                    - 出价者: ${parsedLog.args.bidder}
+                    - 金额: ${ethers.formatEther(parsedLog.args.currentPrice)} 代币`);
+                    break;
+                }
+            } catch (error) {
+                continue;
             }
         }
-        
-        // 使用更高的出价金额
-        const bidAmount = ethers.parseEther("90");  // 出价90代币，确保高于之前的出价
-        console.log("用户2出价:", ethers.formatEther(bidAmount), "代币");
-        
-        try {
-            const bidTx = await auctionManager.connect(addr2).bid(englishAuctionId, bidAmount);
-            const bidReceipt = await bidTx.wait();
-            console.log("\n出价事件日志:");
-            for (const event of bidReceipt.logs) {
+
+        // 辅助函数：格式化事件参数值
+        const formatEventValue = (value) => {
+            if (ethers.isAddress(value)) {
+                return value;
+            } else if (typeof value === 'bigint') {
+                // 尝试将大数字转换为ETH单位，如果失败则返回原始值
                 try {
-                    const parsedEvent = auctionManager.interface.parseLog(event);
-                    if (parsedEvent) {
-                        console.log(`事件名称: ${parsedEvent.name}`);
-                        console.log("事件参数:", parsedEvent.args);
+                    return `${ethers.formatEther(value)} ETH (${value.toString()})`;
+                } catch {
+                    return value.toString();
+                }
+            } else if (value._isBigNumber) {  // 处理BigNumber类型
+                return value.toString();
+            } else {
+                return value;
+            }
+        };
+
+        // 辅助函数：打印事件日志
+        const printEventLogs = async (receipt) => {
+            console.log("\n=== 事件日志详情 ===");
+            for (const log of receipt.logs) {
+                try {
+                    const parsedLog = auctionManager.interface.parseLog(log);
+                    if (parsedLog) {
+                        console.log(`\n事件名称: ${parsedLog.name}`);
+                        console.log('事件参数:');
+                        for (const [key, value] of Object.entries(parsedLog.args)) {
+                            if (isNaN(parseInt(key))) {  // 只打印非数字索引的参数
+                                const formattedValue = formatEventValue(value);
+                                console.log(`  ${key}: ${formattedValue}`);
+                            }
+                        }
+                        
+                        // 打印事件的其他元数据
+                        console.log('\n事件元数据:');
+                        console.log(`  区块号: ${receipt.blockNumber}`);
+                        console.log(`  交易哈希: ${receipt.hash}`);
+                        console.log(`  日志索引: ${log.index}`);
                     }
                 } catch (error) {
                     continue;
                 }
             }
-            console.log("用户2出价成功");
-        } catch (error) {
-            if (error.message.includes("Bid must be higher than current bid")) {
-                // 如果出价仍然太低，再增加出价
-                const higherBidAmount = ethers.parseEther("100");  // 增加到100代币
-                console.log("尝试更高的出价:", ethers.formatEther(higherBidAmount), "代币");
-                await auctionManager.connect(addr2).bid(englishAuctionId, higherBidAmount);
-                console.log("用户2出价成功");
-            } else {
-                throw error;
-            }
-        }
+            console.log("\n=== 事件日志结束 ===\n");
+        };
 
-        // 结束拍卖
-        console.log("\n=== 结束拍卖 ===");
-        
-        // 快进时间
-        console.log("快进时间...");
-        await ethers.provider.send("evm_increaseTime", [7260]); // 2小时1分钟
-        await ethers.provider.send("evm_mine"); // 挖一个新区块
-        console.log("时间快进完成");
+        // // 为荷兰拍卖出价
+        // console.log("\n荷兰拍卖出价测试：");
 
-        // 尝试结束拍卖
-        console.log("结束荷兰式拍卖...");
-        const endDutchTx = await auctionManager.endAuction(dutchAuctionId);
-        const endDutchReceipt = await endDutchTx.wait();
-        console.log("\n结束荷兰式拍卖事件日志:");
-        for (const event of endDutchReceipt.logs) {
-            try {
-                const parsedEvent = auctionManager.interface.parseLog(event);
-                if (parsedEvent) {
-                    console.log(`事件名称: ${parsedEvent.name}`);
-                    console.log("事件参数:", parsedEvent.args);
-                }
-            } catch (error) {
-                continue;
-            }
-        }
-        console.log("荷兰式拍卖已结束");
+        // // 获取当前价格
+        // console.log("获取当前价格...");
+        // const currentPrice = await auctionManager.getCurrentPrice(dutchAuctionId);
+        // console.log(`当前价格: ${ethers.formatEther(currentPrice)} 代币`);
 
-        console.log("结束英式拍卖...");
-        const endEnglishTx = await auctionManager.endAuction(englishAuctionId);
-        const endEnglishReceipt = await endEnglishTx.wait();
-        console.log("\n结束英式拍卖事件日志:");
-        for (const event of endEnglishReceipt.logs) {
-            try {
-                const parsedEvent = auctionManager.interface.parseLog(event);
-                if (parsedEvent) {
-                    console.log(`事件名称: ${parsedEvent.name}`);
-                    console.log("事件参数:", parsedEvent.args);
-                }
-            } catch (error) {
-                continue;
-            }
-        }
-        console.log("英式拍卖已结束");
+        // addr1 出价当前价格
+        console.log(`addr1 出价 ${ethers.formatEther(currentPrice)} 代币...`);
 
-        // 显示最终结果
-        await displayAuctionInfo(dutchAuctionId, "荷兰式");
-        await displayAuctionInfo(englishAuctionId, "英式");
+        // 先授权代币用于保证金
+        console.log("授权代币用于保证金...");
+        tx = await myToken.connect(addr1).approve(auctionManagerAddress, depositAmount);
+        receipt = await tx.wait();
+        console.log("保证金代币授权完成");
+        await printEventLogs(receipt);
+
+        // 支付保证金
+        console.log("支付保证金...");
+        tx = await auctionManager.connect(addr1).deposit(dutchAuctionId);
+        receipt = await tx.wait();
+        console.log("保证金支付完成");
+        await printEventLogs(receipt);
+
+        // 授权代币用于出价
+        console.log("授权代币用于出价...");
+        tx = await myToken.connect(addr1).approve(auctionManagerAddress, currentPrice);
+        receipt = await tx.wait();
+        console.log("出价代币授权完成");
+        await printEventLogs(receipt);
+
+        // 出价
+        console.log("提交出价...");
+        tx = await auctionManager.connect(addr1).bid(dutchAuctionId, currentPrice);
+        receipt = await tx.wait();
+        console.log("出价完成");
+        await printEventLogs(receipt);
+
+        // 显示最终状
+        console.log("\n=== 最终状态 ===");
+        console.log("代币余额：");
+        console.log("Owner:", ethers.formatEther(await myToken.balanceOf(owner.address)));
+        console.log("Addr1:", ethers.formatEther(await myToken.balanceOf(addr1.address)));
+        console.log("Addr2:", ethers.formatEther(await myToken.balanceOf(addr2.address)));
+
+        console.log("\nNFT 数量：");
+        console.log("Owner:", (await myNFT.balanceOf(owner.address)).toString());
+        console.log("Addr1:", (await myNFT.balanceOf(addr1.address)).toString());
+        console.log("Addr2:", (await myNFT.balanceOf(addr2.address)).toString());
 
     } catch (error) {
-        console.error("操作失败:", error.message);
-        if (error.stack) {
-            console.error("错误堆栈:", error.stack);
-        }
+        console.error("操作失败:", error);
+        throw error;
     }
 }
 
 main()
     .then(() => process.exit(0))
     .catch(error => {
-        console.error(error);
+        console.error("操作失败:", error);
         process.exit(1);
-    }); 
+    });
