@@ -7,8 +7,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-
 /*
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
@@ -61,6 +59,7 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
     event AuctionFailed(uint indexed auctionId);
     event PaymentTransferred(uint auctionId);
     event NFTTransferred(uint auctionId);
+
 
     IERC20 public myERC20Token;
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -118,7 +117,9 @@ contract AuctionManager is KeeperCompatibleInterface, Initializable, UUPSUpgrade
         //swapRouter = ISwapRouter(0xb41b78Ce3D1BDEDE48A3d303eD2564F6d1F6fff0);
         //myERC20 = 0xe7be684EfF97FcEe715Ab2a8B8FA52f261e72800; // myERC20代币地址（硬编码）
         //ETHToken = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14; // ETH地址（硬编码）
+        
     }
+
 
     /*
     // 更新 swapRouter 地址
