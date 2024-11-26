@@ -6,23 +6,23 @@ async function main() {
     const addresses = getDeployedAddresses();
 
     // 检查合约地址
-    if (!addresses.MyNFT || !addresses.MyToken || !addresses.AuctionManager) {
+    if (!addresses.DAToken || !addresses.DANFT || !addresses.AuctionManager) {
         console.error("合约地址未找到");
         process.exit(1);
     }
 
-    const myNFTAddress = addresses.MyNFT;
-    const myTokenAddress = addresses.MyToken;
+    const daNFTAddress = addresses.DANFT;
+    const daTokenAddress = addresses.DAToken;
     const auctionManagerAddress = addresses.AuctionManager;
 
     try {
         // 获取合约实例
-        const MyNFT = await ethers.getContractFactory("MyNFT");
-        const MyToken = await ethers.getContractFactory("MyERC20");
+        const DANFT = await ethers.getContractFactory("DANFT");
+        const DAToken = await ethers.getContractFactory("DAToken");
         const AuctionManager = await ethers.getContractFactory("AuctionManager");
 
-        const myNFT = MyNFT.attach(myNFTAddress);
-        const myToken = MyToken.attach(myTokenAddress);
+        const daNFT = DANFT.attach(daNFTAddress);
+        const daToken = DAToken.attach(daTokenAddress);
         const auctionManager = AuctionManager.attach(auctionManagerAddress);
 
         // 铸造 NFT (总共30个，然后分配)
@@ -34,12 +34,12 @@ async function main() {
         // 等待每个NFT铸造完成后再继续
         for(let i = 0; i < 30; i++) {
             try {
-                const tx = await myNFT.connect(owner).mint(`ipfs://token-uri-${i}`);
+                const tx = await daNFT.connect(owner).mint(`ipfs://token-uri-${i}`);
                 const receipt = await tx.wait();
                 
                 // 验证NFT确实被铸造
                 const tokenId = i;
-                const currentOwner = await myNFT.ownerOf(tokenId);
+                const currentOwner = await daNFT.ownerOf(tokenId);
                 if (currentOwner !== owner.address) {
                     throw new Error(`NFT #${tokenId} 铸造验证失败`);
                 }
@@ -59,7 +59,7 @@ async function main() {
             try {
                 // 确保NFT存在并且owner拥有它
                 const tokenId = nftIds[i];
-                const currentOwner = await myNFT.ownerOf(tokenId);
+                const currentOwner = await daNFT.ownerOf(tokenId);
                 
                 if (currentOwner !== owner.address) {
                     console.log(`跳过 NFT #${tokenId}，当前有者不是owner`);
@@ -67,7 +67,7 @@ async function main() {
                 }
 
                 console.log(`转移 NFT #${tokenId} 给 addr1...`);
-                const tx = await myNFT.connect(owner)["safeTransferFrom(address,address,uint256)"](
+                const tx = await daNFT.connect(owner)["safeTransferFrom(address,address,uint256)"](
                     owner.address,
                     addr1.address,
                     tokenId
@@ -75,7 +75,7 @@ async function main() {
                 await tx.wait();
                 
                 // 验证转移
-                const newOwner = await myNFT.ownerOf(tokenId);
+                const newOwner = await daNFT.ownerOf(tokenId);
                 console.log(`NFT #${tokenId} 转移成功，新所有者: ${newOwner}`);
             } catch (error) {
                 console.error(`转移 NFT ${nftIds[i]} 给 addr1 失败:`, error);
@@ -90,7 +90,7 @@ async function main() {
                 console.log(`尝试转移 NFT #${nftIds[i]} 给 addr2...`);
                 
                 // 检查当前所有者
-                const currentOwner = await myNFT.ownerOf(nftIds[i]);
+                const currentOwner = await daNFT.ownerOf(nftIds[i]);
                 console.log(`当前所有者: ${currentOwner}`);
                 
                 // 找到对应的签名者
@@ -107,7 +107,7 @@ async function main() {
                 
                 // 使用当前所有者的签名者转移
                 console.log(`从当前所有者转移 NFT #${nftIds[i]} 给 addr2...`);
-                const tx = await myNFT.connect(currentOwnerSigner)["safeTransferFrom(address,address,uint256)"](
+                const tx = await daNFT.connect(currentOwnerSigner)["safeTransferFrom(address,address,uint256)"](
                     currentOwner,
                     addr2.address,
                     nftIds[i]
@@ -116,7 +116,7 @@ async function main() {
                 console.log(`转移 NFT #${nftIds[i]} 给 addr2 成功`);
                 
                 // 验证新的所有者
-                const newOwner = await myNFT.ownerOf(nftIds[i]);
+                const newOwner = await daNFT.ownerOf(nftIds[i]);
                 console.log(`新的所有者: ${newOwner}`);
             } catch (error) {
                 console.error(`转移 NFT ${nftIds[i]} 给 addr2 失败:`, error);
@@ -133,19 +133,19 @@ async function main() {
         const mintAmount = ethers.parseEther("1.0");
         
         console.log("给 owner 铸造代币...");
-        let mintTx = await myToken.connect(owner).mint(owner.address, mintAmount);
+        let mintTx = await daToken.connect(owner).mint(owner.address, mintAmount);
         await mintTx.wait();
-        console.log(`owner 代币余额: ${ethers.formatEther(await myToken.balanceOf(owner.address))}`);
+        console.log(`owner 代币余额: ${ethers.formatEther(await daToken.balanceOf(owner.address))}`);
         
         console.log("\n给 addr1 铸造代币...");
-        mintTx = await myToken.connect(owner).mint(addr1.address, mintAmount);
+        mintTx = await daToken.connect(owner).mint(addr1.address, mintAmount);
         await mintTx.wait();
-        console.log(`addr1 代币余额: ${ethers.formatEther(await myToken.balanceOf(addr1.address))}`);
+        console.log(`addr1 代币余额: ${ethers.formatEther(await daToken.balanceOf(addr1.address))}`);
         
         console.log("\n给 addr2 铸造代币...");
-        mintTx = await myToken.connect(owner).mint(addr2.address, mintAmount);
+        mintTx = await daToken.connect(owner).mint(addr2.address, mintAmount);
         await mintTx.wait();
-        console.log(`addr2 代币余额: ${ethers.formatEther(await myToken.balanceOf(addr2.address))}`);
+        console.log(`addr2 代币余额: ${ethers.formatEther(await daToken.balanceOf(addr2.address))}`);
 
         // 创建示例拍卖（使用较小的金额）
         console.log("\n=== 创建示例拍卖 ===");
@@ -159,7 +159,7 @@ async function main() {
             startingPrice: ethers.parseEther("0.1"),   // 起拍价 0.1 代币
             reservePrice: ethers.parseEther("0.01"),   // 保留价 0.01 代币
             duration: 3600,                            // 1小时
-            nftContract: await myNFT.getAddress(),
+            nftContract: await daNFT.getAddress(),
             tokenId: nftIds[0],                        // owner的第一个NFT
             priceDecrement: ethers.parseEther("0.01"), // 每次降价 0.01 代币
             decrementInterval: 300                     // 每5分钟降价一次
@@ -167,7 +167,7 @@ async function main() {
 
         // 先授权 NFT 给拍卖合约
         console.log("授权 NFT 给拍卖合约...");
-        let approveTx = await myNFT.connect(owner).approve(auctionManagerAddress, dutchAuctionParams.tokenId);
+        let approveTx = await daNFT.connect(owner).approve(auctionManagerAddress, dutchAuctionParams.tokenId);
         await approveTx.wait();
         console.log("NFT 授权完成");
 
@@ -224,7 +224,7 @@ async function main() {
             startingPrice: ethers.parseEther("0.05"),  // 起拍价 0.05 代币
             reservePrice: ethers.parseEther("0.01"),   // 保留价 0.01 代币
             duration: 3600,                            // 1小时
-            nftContract: await myNFT.getAddress(),
+            nftContract: await daNFT.getAddress(),
             tokenId: nftIds[10],                       // addr1的第一个NFT
             priceDecrement: 0,                         // 英式拍卖不需要
             decrementInterval: 0                       // 英式拍卖不需要
@@ -232,7 +232,7 @@ async function main() {
 
         // 先授权 NFT 给拍卖合约
         console.log("\n授权 NFT 给拍卖合约...");
-        approveTx = await myNFT.connect(addr1).approve(auctionManagerAddress, englishAuctionParams.tokenId);
+        approveTx = await daNFT.connect(addr1).approve(auctionManagerAddress, englishAuctionParams.tokenId);
         await approveTx.wait();
         console.log("NFT 授权完成");
 
@@ -294,7 +294,7 @@ async function main() {
         // 先授权代币用于保证金
         console.log("授权代币用于保证金...");
         const depositAmount = ethers.parseEther("0.01"); // 假设保证金是 0.01 币
-        await myToken.connect(addr2).approve(auctionManagerAddress, depositAmount);
+        await daToken.connect(addr2).approve(auctionManagerAddress, depositAmount);
         console.log("保证金代币授权完成");
         
         // 支付保证金
@@ -305,7 +305,7 @@ async function main() {
         
         // 授权代币用于出价
         console.log("授权代币用于出价...");
-        await myToken.connect(addr2).approve(auctionManagerAddress, englishBidAmount1);
+        await daToken.connect(addr2).approve(auctionManagerAddress, englishBidAmount1);
         console.log("出价代币授权完成");
         
         // 出价
@@ -334,7 +334,7 @@ async function main() {
         
         // 先授权代币用于保证金
         console.log("授权代币用于保证金...");
-        await myToken.connect(owner).approve(auctionManagerAddress, depositAmount);
+        await daToken.connect(owner).approve(auctionManagerAddress, depositAmount);
         console.log("保证金代币授权完成");
         
         // 支付保证金
@@ -345,7 +345,7 @@ async function main() {
         
         // 授权代币用于出价
         console.log("授权代币用于出价...");
-        await myToken.connect(owner).approve(auctionManagerAddress, englishBidAmount2);
+        await daToken.connect(owner).approve(auctionManagerAddress, englishBidAmount2);
         console.log("出价代币授权完成");
         
         // 出价
@@ -423,11 +423,11 @@ async function main() {
         // console.log(`当前价格: ${ethers.formatEther(currentPrice)} 代币`);
 
         // addr1 出价当前价格
-        console.log(`addr1 出价 ${ethers.formatEther(currentPrice)} 代币...`);
+        // console.log(`addr1 出价 ${ethers.formatEther(currentPrice)} 代币...`);
 
         // 先授权代币用于保证金
         console.log("授权代币用于保证金...");
-        tx = await myToken.connect(addr1).approve(auctionManagerAddress, depositAmount);
+        tx = await daToken.connect(addr1).approve(auctionManagerAddress, depositAmount);
         receipt = await tx.wait();
         console.log("保证金代币授权完成");
         await printEventLogs(receipt);
@@ -441,7 +441,7 @@ async function main() {
 
         // 授权代币用于出价
         console.log("授权代币用于出价...");
-        tx = await myToken.connect(addr1).approve(auctionManagerAddress, currentPrice);
+        tx = await daToken.connect(addr1).approve(auctionManagerAddress, currentPrice);
         receipt = await tx.wait();
         console.log("出价代币授权完成");
         await printEventLogs(receipt);
@@ -456,14 +456,14 @@ async function main() {
         // 显示最终状
         console.log("\n=== 最终状态 ===");
         console.log("代币余额：");
-        console.log("Owner:", ethers.formatEther(await myToken.balanceOf(owner.address)));
-        console.log("Addr1:", ethers.formatEther(await myToken.balanceOf(addr1.address)));
-        console.log("Addr2:", ethers.formatEther(await myToken.balanceOf(addr2.address)));
+        console.log("Owner:", ethers.formatEther(await daToken.balanceOf(owner.address)));
+        console.log("Addr1:", ethers.formatEther(await daToken.balanceOf(addr1.address)));
+        console.log("Addr2:", ethers.formatEther(await daToken.balanceOf(addr2.address)));
 
         console.log("\nNFT 数量：");
-        console.log("Owner:", (await myNFT.balanceOf(owner.address)).toString());
-        console.log("Addr1:", (await myNFT.balanceOf(addr1.address)).toString());
-        console.log("Addr2:", (await myNFT.balanceOf(addr2.address)).toString());
+        console.log("Owner:", (await daNFT.balanceOf(owner.address)).toString());
+        console.log("Addr1:", (await daNFT.balanceOf(addr1.address)).toString());
+        console.log("Addr2:", (await daNFT.balanceOf(addr2.address)).toString());
 
     } catch (error) {
         console.error("操作失败:", error);

@@ -2,7 +2,6 @@ const hre = require("hardhat");
 const fs = require('fs');
 const path = require('path');
 
-// 添加保存地址的辅助函数
 const ADDRESS_FILE = path.join(__dirname, '../deployed-addresses.json');
 
 function saveDeployedAddresses(addresses) {
@@ -22,42 +21,60 @@ function getDeployedAddresses() {
 
 async function main() {
     const [deployer] = await hre.ethers.getSigners();
-    console.log("Deploying contracts with account:", deployer.address);
+    console.log("开始部署合约，部署账户:", deployer.address);
 
     try {
-        // 读取现有地址（如果有的话）
         const addresses = getDeployedAddresses();
 
-        // 部署 ERC20 代币
-        const MyToken = await hre.ethers.getContractFactory("MyERC20");
-        const myToken = await MyToken.deploy(deployer.address, "1000000000000000000000000");
-        await myToken.waitForDeployment();
-        addresses.MyToken = await myToken.getAddress();
-        console.log("MyToken deployed to:", addresses.MyToken);
+        // 部署 DAToken
+        console.log("正在部署 DAToken...");
+        const DAToken = await hre.ethers.getContractFactory("DAToken");
+        const daToken = await DAToken.deploy(
+            deployer.address,
+            "1000000000000000000000000" // 1,000,000 tokens with 18 decimals
+        );
+        await daToken.waitForDeployment();
+        addresses.DAToken = await daToken.getAddress();
+        console.log("DAToken 已部署到:", addresses.DAToken);
 
-        // 部署 NFT
-        const MyNFT = await hre.ethers.getContractFactory("MyNFT");
-        const myNFT = await MyNFT.deploy(deployer.address);
-        await myNFT.waitForDeployment();
-        addresses.MyNFT = await myNFT.getAddress();
-        console.log("MyNFT deployed to:", addresses.MyNFT);
+        // 部署 DANFT
+        console.log("正在部署 DANFT...");
+        const DANFT = await hre.ethers.getContractFactory("DANFT");
+        const daNFT = await DANFT.deploy(deployer.address);
+        await daNFT.waitForDeployment();
+        addresses.DANFT = await daNFT.getAddress();
+        console.log("DANFT 已部署到:", addresses.DANFT);
 
         // 部署 AuctionManager
+        console.log("正在部署 AuctionManager...");
         const AuctionManager = await hre.ethers.getContractFactory("AuctionManager");
         const auctionManager = await hre.upgrades.deployProxy(
             AuctionManager,
-            [deployer.address, await myToken.getAddress()],
-            { kind: 'uups' }
+            [deployer.address, await daToken.getAddress()],
+            {
+                kind: 'uups',
+                initializer: 'initialize',
+                unsafeAllow: ['constructor']
+            }
         );
         await auctionManager.waitForDeployment();
         addresses.AuctionManager = await auctionManager.getAddress();
-        console.log("AuctionManager deployed to:", addresses.AuctionManager);
+        console.log("AuctionManager 已部署到:", addresses.AuctionManager);
 
-        // 保存所有部署地址
+        // 验证部署
+        console.log("验证部署结果...");
+        const tokenBalance = await daToken.balanceOf(deployer.address);
+        console.log("部署者 DAToken 余额:", tokenBalance.toString());
+
+        const auctionManagerToken = await auctionManager.myERC20Token();
+        console.log("AuctionManager 中的 token 地址:", auctionManagerToken);
+
+        // 保存地址
         saveDeployedAddresses(addresses);
+        console.log("部署完成！");
 
     } catch (error) {
-        console.error("Deployment error:", error);
+        console.error("部署出错:", error);
         throw error;
     }
 }
