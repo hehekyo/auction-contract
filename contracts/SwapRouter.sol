@@ -67,6 +67,7 @@ contract SwapRouter {
         uint amountTokenDesired,
         uint amountTokenMin,
         uint amountETHMin,
+        address to,
         uint deadline
     ) external virtual  payable ensure(deadline) returns (uint amountToken, uint amountETH, uint liquidity) {
         (amountToken, amountETH) = _addLiquidity(
@@ -81,7 +82,7 @@ contract SwapRouter {
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
         IWETH(WETH).deposit{value: amountETH}();
         assert(IWETH(WETH).transfer(pair, amountETH));
-        liquidity = ISwapPair(pair).mint(msg.sender);
+        liquidity = ISwapPair(pair).mint(to);
         // refund dust eth, if any
         if (msg.value > amountETH) TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
     }
