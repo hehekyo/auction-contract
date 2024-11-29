@@ -3,9 +3,6 @@ const { getDeployedAddresses } = require("../utils/address-helper");
 
 // Define common constants
 const DEPOSIT_AMOUNT = ethers.parseEther("0.01"); // 0.01 token deposit for all auctions
-const INITIAL_ETH_BALANCE = ethers.parseEther("100"); // 100 ETH
-const INITIAL_TOKEN_BALANCE = ethers.parseEther("10000"); // 10000 tokens
-const ADDITIONAL_TOKENS = ethers.parseEther("100"); // 100 additional tokens for addr1
 
 async function main() {
     const [owner, addr1, addr2] = await ethers.getSigners();
@@ -181,23 +178,23 @@ async function main() {
         // 用于存储拍卖ID
         let dutchAuctionId, englishAuctionId;
         
-        // // 荷兰式拍卖参数
-        // const dutchAuctionParams = {
-        //     auctionType: 1, // DutchAuction
-        //     startingPrice: ethers.parseEther("0.1"),   // 起拍价 0.1 代币
-        //     reservePrice: ethers.parseEther("0.01"),   // 保留价 0.01 代币
-        //     duration: 3600,                            // 1小时
-        //     nftContract: await daNFT.getAddress(),
-        //     tokenId: nftIds[0],                        // owner的第一个NFT
-        //     priceDecrement: ethers.parseEther("0.01"), // 每次降价 0.01 代币
-        //     decrementInterval: 300                     // 每5分钟降价一��
-        // };
+        // 荷兰式拍卖参数
+        const dutchAuctionParams = {
+            auctionType: 1, // DutchAuction
+            startingPrice: ethers.parseEther("0.1"),   // 起拍价 0.1 代币
+            reservePrice: ethers.parseEther("0.01"),   // 保留价 0.01 代币
+            duration: 3600,                            // 1小时
+            nftContract: await daNFT.getAddress(),
+            tokenId: nftIds[0],                        // owner的第一个NFT
+            priceDecrement: ethers.parseEther("0.01"), // 每次降价 0.01 代币
+            decrementInterval: 300                     // 每5分钟降价一次
+        };
 
-        // // 先授权 NFT 给拍卖合约
-        // console.log("授权 NFT 给拍卖合约...");
-        // let approveTx = await daNFT.connect(owner).approve(auctionManagerAddress, dutchAuctionParams.tokenId);
-        // await approveTx.wait();
-        // console.log("NFT 授权完成");
+        // 先授权 NFT 给拍卖合约
+        console.log("授权 NFT 给拍卖合约...");
+        let approveTx = await daNFT.connect(owner).approve(auctionManagerAddress, dutchAuctionParams.tokenId);
+        await approveTx.wait();
+        console.log("NFT 授权完成");
 
         // // 创建荷兰式拍卖
         // console.log("创建荷兰式拍卖...");
@@ -361,7 +358,7 @@ async function main() {
         
         // 先授权代币用于保证金
         console.log("授权代币用于保证金...");
-        await daToken.connect(owner).approve(auctionManagerAddress, DEPOSIT_AMOUNT);
+        await daToken.connect(owner).approve(auctionManagerAddress, englishAuctionDepositAmount);
         console.log("保证金代币授权完成");
         
         // 支付保证金
@@ -453,44 +450,44 @@ async function main() {
         // console.log(`addr1 出价 ${ethers.formatEther(currentPrice)} 代币...`);
 
         // 先授权代币用于保证金
-        // console.log("授权代币用于保证金...");
-        // tx = await daToken.connect(addr1).approve(auctionManagerAddress, DEPOSIT_AMOUNT);
-        // receipt = await tx.wait();
-        // console.log("保证金代币授权完成");
-        // await printEventLogs(receipt);
+        console.log("授权代币用于保证金...");
+        tx = await daToken.connect(addr1).approve(auctionManagerAddress, englishAuctionDepositAmount);
+        receipt = await tx.wait();
+        console.log("保证金代币授权完成");
+        await printEventLogs(receipt);
 
-        // // 支付保证金
-        // console.log("支付保证金...");
-        // tx = await auctionManager.connect(addr1).deposit(dutchAuctionId);
-        // receipt = await tx.wait();
-        // console.log("保证金支付完成");
-        // await printEventLogs(receipt);
+        // 支付保证金
+        console.log("支付保证金...");
+        tx = await auctionManager.connect(addr1).deposit(dutchAuctionId);
+        receipt = await tx.wait();
+        console.log("保证金支付完成");
+        await printEventLogs(receipt);
 
-        // // 授权代币用于出价
-        // console.log("授权代币用于出价...");
-        // tx = await daToken.connect(addr1).approve(auctionManagerAddress, currentPrice);
-        // receipt = await tx.wait();
-        // console.log("出价代币授权完成");
-        // await printEventLogs(receipt);
+        // 授权代币用于出价
+        console.log("授权代币用于出价...");
+        tx = await daToken.connect(addr1).approve(auctionManagerAddress, currentPrice);
+        receipt = await tx.wait();
+        console.log("出价代币授权完成");
+        await printEventLogs(receipt);
 
-        // // 出价
-        // console.log("提交出价...");
-        // tx = await auctionManager.connect(addr1).bid(dutchAuctionId, currentPrice);
-        // receipt = await tx.wait();
-        // console.log("出价完成");
-        // await printEventLogs(receipt);
+        // 出价
+        console.log("提交出价...");
+        tx = await auctionManager.connect(addr1).bid(dutchAuctionId, currentPrice);
+        receipt = await tx.wait();
+        console.log("出价完成");
+        await printEventLogs(receipt);
 
-        // // 显示最终状
-        // console.log("\n=== 最终状态 ===");
-        // console.log("代币余额：");
-        // console.log("Owner:", ethers.formatEther(await daToken.balanceOf(owner.address)));
-        // console.log("Addr1:", ethers.formatEther(await daToken.balanceOf(addr1.address)));
-        // console.log("Addr2:", ethers.formatEther(await daToken.balanceOf(addr2.address)));
+        // 显示最终状
+        console.log("\n=== 最终状态 ===");
+        console.log("代币余额：");
+        console.log("Owner:", ethers.formatEther(await daToken.balanceOf(owner.address)));
+        console.log("Addr1:", ethers.formatEther(await daToken.balanceOf(addr1.address)));
+        console.log("Addr2:", ethers.formatEther(await daToken.balanceOf(addr2.address)));
 
-        // console.log("\nNFT 数量：");
-        // console.log("Owner:", (await daNFT.balanceOf(owner.address)).toString());
-        // console.log("Addr1:", (await daNFT.balanceOf(addr1.address)).toString());
-        // console.log("Addr2:", (await daNFT.balanceOf(addr2.address)).toString());
+        console.log("\nNFT 数量：");
+        console.log("Owner:", (await daNFT.balanceOf(owner.address)).toString());
+        console.log("Addr1:", (await daNFT.balanceOf(addr1.address)).toString());
+        console.log("Addr2:", (await daNFT.balanceOf(addr2.address)).toString());
 
         // Create three English auctions
         console.log("\n=== Creating English Auctions ===");
@@ -591,45 +588,6 @@ async function main() {
             tx = await auctionManager.connect(owner).bid(auctionId, bidAmount2);
             await tx.wait();
         }
-
-        // Set initial token balances
-        console.log("\n=== Setting Initial Token Balances ===");
-        
-        // Mint tokens for contract
-        console.log("Minting tokens for AuctionManager...");
-        tx = await daToken.connect(owner).mint(auctionManagerAddress, INITIAL_TOKEN_BALANCE);
-        await tx.wait();
-        console.log(`Set AuctionManager token balance to: ${ethers.formatEther(INITIAL_TOKEN_BALANCE)} DAToken`);
-
-        // Mint initial tokens for addr1
-        console.log("Minting initial tokens for addr1...");
-        tx = await daToken.connect(owner).mint(addr1.address, INITIAL_TOKEN_BALANCE);
-        await tx.wait();
-        console.log(`Set addr1 token balance to: ${ethers.formatEther(INITIAL_TOKEN_BALANCE)} DAToken`);
-
-        // Mint additional tokens for addr1
-        console.log("\n=== Minting Additional Tokens for addr1 ===");
-        tx = await daToken.connect(owner).mint(addr1.address, ADDITIONAL_TOKENS);
-        await tx.wait();
-        console.log(`Minted additional ${ethers.formatEther(ADDITIONAL_TOKENS)} DAToken for addr1`);
-
-        // Mint tokens for addr2
-        console.log("\nMinting tokens for addr2...");
-        tx = await daToken.connect(owner).mint(addr2.address, INITIAL_TOKEN_BALANCE);
-        await tx.wait();
-        console.log(`Set addr2 token balance to: ${ethers.formatEther(INITIAL_TOKEN_BALANCE)} DAToken`);
-
-        // Print final balances
-        console.log("\n=== Final Balances ===");
-        console.log("ETH Balances:");
-        console.log(`AuctionManager: ${ethers.formatEther(await ethers.provider.getBalance(auctionManagerAddress))} ETH`);
-        console.log(`addr1: ${ethers.formatEther(await ethers.provider.getBalance(addr1.address))} ETH`);
-        console.log(`addr2: ${ethers.formatEther(await ethers.provider.getBalance(addr2.address))} ETH`);
-        
-        console.log("\nToken Balances:");
-        console.log(`AuctionManager: ${ethers.formatEther(await daToken.balanceOf(auctionManagerAddress))} DAToken`);
-        console.log(`addr1: ${ethers.formatEther(await daToken.balanceOf(addr1.address))} DAToken`); // Should show 10100 tokens
-        console.log(`addr2: ${ethers.formatEther(await daToken.balanceOf(addr2.address))} DAToken`);
 
     } catch (error) {
         console.error("操作失败:", error);
