@@ -13,25 +13,90 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    function initialize(address initialAdmin, IERC20 _myERC20Token) public initializer {
+    function initialize(
+        address initialAdmin, 
+        IERC20 _daToken
+    ) public initializer {
         __AccessControl_init();
-        // __Ownable_init();
-        // __UUPSUpgradeable_init();
         _setRoleAdmin(ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(ADMIN_ROLE, initialAdmin);
-        myERC20Token = _myERC20Token;
+        daToken = _daToken;
     }
 
     // 定义拍卖类型
     enum AuctionType { EnglishAuction,DutchAuction}
     // 定义拍卖状态
-    enum AuctionStatus { Registration, Ongoing, Ended }
+    enum AuctionStatus { 
+        Ongoing,      // 进行中
+        Succeeded,    // 成功结束（有人中标）
+        Failed,       // 失败结束（无人中标或未达到保留价）
+        Cancelled     // 取消结束
+    }
 
     uint[] private auctions2End;
     uint[] private dutchAuctions2UpdatePrice;
 
-    // 拍卖事件
+    
+
+    IERC20 public daToken;
+
+    struct Auction {
+        // 基本信息
+        AuctionType auctionType;
+        AuctionStatus auctionStatus;
+        address seller;
+        address winner;
+        
+        // NFT 信息
+        address nftContract;
+        uint tokenId;
+        
+        // 时间相关
+        uint startTime;
+        uint endTime;
+        uint duration;
+        
+        // 通用价格信息
+        uint startingPrice;
+        uint currentPrice;
+        uint finalPrice;
+        uint depositAmount;
+        
+        // 英式拍卖特有
+        uint currentBid;
+        uint reservePrice;
+        
+        // 荷兰拍卖特有
+        uint minimumPrice;
+        uint priceDecrement;
+        uint decrementInterval;
+        uint lastUpdateTime;
+        
+        // 状态标记
+        mapping(address => bool) hasDeposited;
+        bool isPaymentTransferred;
+        bool isNFTTransferred;
+    }
+
+    // 存储拍卖
+    mapping(uint => Auction) public auctions; // 存储英式拍卖
+
+    uint public auctionCount;  // 当前拍卖的总数
+
+    // Additional Map for checking if key exists
+    mapping (uint => bool) _auctionIdExist;  
+
+    // 添加重入锁
+    bool private locked;
+    modifier nonReentrant() {
+        require(!locked, "Reentrant call");
+        locked = true;
+        _;
+        locked = false;
+    }
+
+// 拍卖事件
     event AuctionStarted(
         uint256 indexed auctionId,
         address indexed seller,
@@ -47,9 +112,9 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     );
 
     event AuctionEnded(
-        uint indexed auctionId, 
-        address indexed winner,
-        uint256 finalPrice,
+        uint indexed auctionId,
+        address winner,
+        uint finalPrice,
         uint256 endTime
     );
 
@@ -82,13 +147,6 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         uint256 timestamp
     );
 
-    event PaymentSettled(
-        uint indexed auctionId,
-        address indexed seller,
-        address indexed buyer,
-        uint256 amount,
-        uint256 timestamp
-    );
 
     event NFTTransferred(
         uint indexed auctionId,
@@ -98,61 +156,6 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         uint256 tokenId,
         uint256 timestamp
     );
-
-    IERC20 public myERC20Token;
-
-    struct Auction {
-        AuctionType auctionType;
-        address seller;
-        address nftContract;
-        uint tokenId;
-        AuctionStatus auctionStatus;
-        uint duration;
-        uint depositAmount;
-        address highestBidder;
-        uint finalPrice;
-        EnglishAuction englishAuction;
-        DutchAuction dutchAuction;
-        mapping(address => bool) hasDeposited; // 存储参与者是否已缴纳押金
-        bool isPaymentTransferred;
-        bool isNFTTransferred;
-    }
-
-    // 英式拍卖结构体
-    struct EnglishAuction {
-        uint startingPrice;
-        uint reservePrice;    // 最低成交价
-        uint auctionEndTime;
-        uint currentBid;
-    }
-
-    // 荷兰拍卖结构体
-    struct DutchAuction {
-        uint startingPrice;
-        uint endPrice;
-        uint auctionEndTime;
-        uint currentPrice;
-        uint priceDecrement;
-        uint decrementInterval;
-        uint lastUpdateTime;
-    }
-
-    // 存储拍卖
-    mapping(uint => Auction) public auctions; // 存储英式拍卖
-
-    uint public auctionCount;  // 当前拍卖的总数
-
-    // Additional Map for checking if key exists
-    mapping (uint => bool) _auctionIdExist;  
-
-    // 添加重入锁
-    bool private locked;
-    modifier nonReentrant() {
-        require(!locked, "Reentrant call");
-        locked = true;
-        _;
-        locked = false;
-    }
 
     function calculateDepositAmount(uint startingPrice) internal pure returns (uint) {
         // 设置为起拍价的10%
@@ -189,11 +192,12 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         if (auctionType == AuctionType.EnglishAuction) {
             require(priceDecrement == 0, "English auction should not have price decrement");
             require(decrementInterval == 0, "English auction should not have decrement interval");
+            require(reservePrice <= startingPrice, "Reserve price must be <= starting price");
         } else if (auctionType == AuctionType.DutchAuction) {
             require(priceDecrement > 0, "Dutch auction must have price decrement");
             require(decrementInterval > 0, "Dutch auction must have decrement interval");
             require(duration >= decrementInterval, "Duration too short for price decrements");
-            require(startingPrice > reservePrice, "Starting price must be greater than end price");
+            require(startingPrice > reservePrice, "Starting price must be greater than minimum price");
         }
 
         auctionCount++;
@@ -201,30 +205,41 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         _auctionIdExist[auctionId] = true;
 
         Auction storage newAuction = auctions[auctionId];
+        
+        // 基本信息
+        newAuction.auctionType = auctionType;
+        newAuction.auctionStatus = AuctionStatus.Ongoing;
         newAuction.seller = msg.sender;
+        newAuction.winner = address(0);
+        
+        // NFT 信息
         newAuction.nftContract = nftContract;
         newAuction.tokenId = tokenId;
-        newAuction.auctionStatus = AuctionStatus.Ongoing;
-        newAuction.depositAmount = depositAmount;  // 设置计算得到的押金金额
-        newAuction.auctionType = auctionType;
+        
+        // 时间相关
+        newAuction.startTime = block.timestamp;
+        newAuction.endTime = block.timestamp + duration;
         newAuction.duration = duration;
-
-        uint _endTime = block.timestamp + duration;
+        
+        // 通用价格信息
+        newAuction.startingPrice = startingPrice;
+        newAuction.currentPrice = startingPrice;
+        newAuction.depositAmount = depositAmount;
 
         if (auctionType == AuctionType.EnglishAuction) {
-            newAuction.englishAuction.startingPrice = startingPrice;
-            newAuction.englishAuction.reservePrice = reservePrice;
-            newAuction.englishAuction.currentBid = 0;
-            newAuction.englishAuction.auctionEndTime = _endTime;
+            // 英式拍卖特有
+            newAuction.currentBid = 0;
+            newAuction.reservePrice = reservePrice;
         } else {
-            newAuction.dutchAuction.startingPrice = startingPrice;
-            newAuction.dutchAuction.endPrice = reservePrice;
-            newAuction.dutchAuction.currentPrice = startingPrice;
-            newAuction.dutchAuction.priceDecrement = priceDecrement;
-            newAuction.dutchAuction.decrementInterval = decrementInterval;
-            newAuction.dutchAuction.auctionEndTime = _endTime;
-            newAuction.dutchAuction.lastUpdateTime = block.timestamp;
+            // 荷兰拍卖特有
+            newAuction.minimumPrice = reservePrice;
+            newAuction.priceDecrement = priceDecrement;
+            newAuction.decrementInterval = decrementInterval;
+            newAuction.lastUpdateTime = block.timestamp;
         }
+
+        // 转移 NFT 到合约
+        IERC721(nftContract).transferFrom(msg.sender, address(this), tokenId);
 
         emit AuctionStarted(
             auctionId,
@@ -237,7 +252,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             duration,
             depositAmount,
             block.timestamp,
-            _endTime
+            newAuction.endTime
         );
     }
 
@@ -250,65 +265,65 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         Auction storage auction = auctions[auctionId];
         
         // 状态检查
-        require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction is not ongoing");
+        require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction not ongoing");
         require(msg.sender != auction.seller, "Seller cannot bid");
         require(auction.hasDeposited[msg.sender], "Deposit not paid");
 
         // 时间检查
         if (auction.auctionType == AuctionType.EnglishAuction) {
-            require(block.timestamp < auction.englishAuction.auctionEndTime, "Auction has ended");
+            require(block.timestamp < auction.endTime, "Auction has ended");
         } else {
-            require(block.timestamp < auction.dutchAuction.auctionEndTime, "Auction has ended");
+            require(block.timestamp < auction.endTime, "Auction has ended");
         }
 
         // 拍卖类型特定检查
         if (auction.auctionType == AuctionType.DutchAuction) {
             // 荷兰拍卖检查
-            require(auction.highestBidder == address(0), "Dutch auction already has a bidder");
-            require(amount == auction.dutchAuction.currentPrice, "Bid must equal current price");
+            require(auction.winner == address(0), "Dutch auction already has a bidder");
+            require(amount == auction.currentPrice, "Bid must equal current price");
             
             // 检查用户是否有足够的代币余额
-            require(myERC20Token.balanceOf(msg.sender) >= amount, "Insufficient token balance");
+            require(daToken.balanceOf(msg.sender) >= amount, "Insufficient token balance");
             // 检查用户是否已经授权合约使用足够的代币
-            require(myERC20Token.allowance(msg.sender, address(this)) >= amount, "Insufficient token allowance");
+            require(daToken.allowance(msg.sender, address(this)) >= amount, "Insufficient token allowance");
 
             // 更新拍卖状态
-            auction.highestBidder = msg.sender;
+            auction.winner = msg.sender;
             auction.finalPrice = amount;
             
             emit BidPlaced(auctionId, msg.sender, amount, block.timestamp);
 
         } else {
             // 英式拍卖检查
-            require(amount > auction.englishAuction.currentBid, "Bid must be higher than current bid");
-            require(amount >= auction.englishAuction.startingPrice, "Bid must be at least starting price");
+            require(amount > auction.currentBid, "Bid must be higher than current bid");
+            require(amount >= auction.startingPrice, "Bid must be at least starting price");
             
-            // 如果不是第一个出价，要求新出价必须高于当前出价一定比例（例如1%）
-            if (auction.englishAuction.currentBid > 0) {
-                require(amount >= auction.englishAuction.currentBid + (auction.englishAuction.currentBid / 100), 
+            // 如果不是第一个出价，要求新出价须高于当前出价一定比例（例如1%）
+            if (auction.currentBid > 0) {
+                require(amount >= auction.currentBid + (auction.currentBid / 100), 
                     "Bid increment too small");
             }
 
             // 检查用户是否有足够的代币余额
-            require(myERC20Token.balanceOf(msg.sender) >= amount, "Insufficient token balance");
+            require(daToken.balanceOf(msg.sender) >= amount, "Insufficient token balance");
             // 检查用户是否已经授权合约使用足够的代币
-            require(myERC20Token.allowance(msg.sender, address(this)) >= amount, "Insufficient token allowance");
+            require(daToken.allowance(msg.sender, address(this)) >= amount, "Insufficient token allowance");
 
             // 更新拍卖状态
-            if (auction.highestBidder != address(0)) {
+            if (auction.winner != address(0)) {
                 // 如果存在之前的最高出价者，退还其出价
-                require(myERC20Token.transfer(auction.highestBidder, auction.englishAuction.currentBid), 
+                require(daToken.transfer(auction.winner, auction.currentBid), 
                     "Failed to refund previous bidder");
             }
 
-            auction.englishAuction.currentBid = amount;
-            auction.highestBidder = msg.sender;
+            auction.currentBid = amount;
+            auction.winner = msg.sender;
             
             emit BidPlaced(auctionId, msg.sender, amount, block.timestamp);
         }
 
         // 转移竞标金额到合约
-        require(myERC20Token.transferFrom(msg.sender, address(this), amount), 
+        require(daToken.transferFrom(msg.sender, address(this), amount), 
             "Failed to transfer bid amount");
     }
 
@@ -327,30 +342,27 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         require(auction.depositAmount > 0, "Invalid deposit amount");
 
         // 时间检查
-        uint auctionEndTime = auction.auctionType == AuctionType.EnglishAuction ? 
-            auction.englishAuction.auctionEndTime : 
-            auction.dutchAuction.auctionEndTime;
-        require(block.timestamp < auctionEndTime, "Auction has ended");
+        require(block.timestamp < auction.endTime, "Auction has ended");
 
         // 荷兰拍卖特殊检查
         if (auction.auctionType == AuctionType.DutchAuction) {
-            require(auction.highestBidder == address(0), "Dutch auction already has a winner");
+            require(auction.winner == address(0), "Dutch auction already has a winner");
         }
 
         // 代币相关检查
-        require(address(myERC20Token) != address(0), "Token not initialized");
+        require(address(daToken) != address(0), "Token not initialized");
         uint depositAmount = auction.depositAmount;
 
         // 余额检查
-        uint userBalance = myERC20Token.balanceOf(msg.sender);
+        uint userBalance = daToken.balanceOf(msg.sender);
         require(userBalance >= depositAmount, "Insufficient token balance");
         
-        // 授权检查
-        uint allowance = myERC20Token.allowance(msg.sender, address(this));
+        // 授权检
+        uint allowance = daToken.allowance(msg.sender, address(this));
         require(allowance >= depositAmount, "Insufficient token allowance");
 
         // 安全转账
-        require(myERC20Token.transferFrom(msg.sender, address(this), depositAmount), 
+        require(daToken.transferFrom(msg.sender, address(this), depositAmount), 
             "Deposit transfer failed");
 
         // 更新状态
@@ -362,82 +374,80 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     // 结束拍卖
     function endAuction(uint auctionId) public {
-        // 基本检查
-        require(_auctionIdExist[auctionId], "Auction does not exist");
-        
         Auction storage auction = auctions[auctionId];
-        require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction is not ongoing");
+        require(auction.endTime <= block.timestamp, "Auction not ended");
+        require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction not ongoing");
 
-        // 时间检查
-        uint endTime = auction.auctionType == AuctionType.EnglishAuction ? 
-            auction.englishAuction.auctionEndTime : 
-            auction.dutchAuction.auctionEndTime;
-        
-        // 英式拍卖必须等到结束时间
         if (auction.auctionType == AuctionType.EnglishAuction) {
-            require(block.timestamp >= endTime, "Auction not yet ended");
-            require(auction.englishAuction.currentBid >= auction.englishAuction.reservePrice, 
-                "Reserve price not met");
+            if (auction.currentBid < auction.reservePrice) {
+                // 未达到最低成交价，拍卖失败
+                auction.auctionStatus = AuctionStatus.Failed;
+                // 退还最高出价者的保证金和出价
+                if (auction.winner != address(0)) {
+                    require(daToken.transfer(auction.winner, auction.currentBid), 
+                        "Failed to refund winner");
+                }
+                // 退还卖家的 NFT
+                IERC721(auction.nftContract).transferFrom(
+                    address(this),
+                    auction.seller,
+                    auction.tokenId
+                );
+                emit AuctionEnded(
+                    auctionId,
+                    auction.winner,
+                    auction.finalPrice,
+                    block.timestamp    // 使用当前时间戳
+                );
+            } else {
+                // 达到最低成交价，完成拍卖
+                _completeAuction(auctionId);
+            }
+        } else if (auction.auctionType == AuctionType.DutchAuction) {
+            // 荷兰拍卖检查最低价格
+            uint currentPrice = getCurrentPrice(auctionId);
+            require(currentPrice >= auction.minimumPrice, "Price below minimum");
+            
+            if (auction.winner == address(0)) {
+                // 无人购买，拍卖失败
+                auction.auctionStatus = AuctionStatus.Failed;
+                // 退还卖家的 NFT
+                IERC721(auction.nftContract).transferFrom(
+                    address(this),
+                    auction.seller,
+                    auction.tokenId
+                );
+                emit AuctionEnded(
+                    auctionId,
+                    auction.winner,
+                    auction.finalPrice,
+                    block.timestamp    // 使用当前时间戳
+                );
+            } else {
+                // 有人购买��完成拍卖
+                _completeAuction(auctionId);
+            }
+        }
+    }
+
+    // 获取荷兰拍卖当前价格
+    function getCurrentPrice(uint auctionId) public view returns (uint) {
+        Auction storage auction = auctions[auctionId];
+        require(auction.auctionType == AuctionType.DutchAuction, "Not Dutch auction");
+        
+        if (block.timestamp >= auction.endTime) {
+            return auction.currentPrice;
         }
         
-        // 荷拍卖有人出价就可以结束
-        if (auction.auctionType == AuctionType.DutchAuction) {
-            require(auction.highestBidder != address(0) || block.timestamp >= endTime, 
-                "Auction cannot be ended yet");
+        uint256 elapsed = block.timestamp - auction.lastUpdateTime;
+        uint256 intervals = elapsed / auction.decrementInterval;
+        uint256 totalDecrement = intervals * auction.priceDecrement;
+        
+        if (auction.startingPrice - totalDecrement < auction.minimumPrice) {
+            return auction.minimumPrice;
         }
-
-        // 检查是否已经有人出价
-        address highestBidder = auction.highestBidder;
-        if (highestBidder == address(0)) {
-            // 无人出价，拍卖失败
-            auction.auctionStatus = AuctionStatus.Ended;
-            emit AuctionCancelled(auctionId, msg.sender, "No bids", block.timestamp);
-            return;
-        }
-
-        // 防止重复执行
-        require(!auction.isPaymentTransferred, "Payment already transferred");
-        require(!auction.isNFTTransferred, "NFT already transferred");
-
-        // 设置最终价格
-        if (auction.auctionType == AuctionType.EnglishAuction) {
-            auction.finalPrice = auction.englishAuction.currentBid;
-        } else {
-            auction.finalPrice = auction.dutchAuction.currentPrice;
-        }
-
-        // 更新状标志
-        auction.isPaymentTransferred = true;
-        auction.isNFTTransferred = true;
-        auction.auctionStatus = AuctionStatus.Ended;
-
-        // 安全转账检查
-        IERC721 nftContract = IERC721(auction.nftContract);
-        require(nftContract.ownerOf(auction.tokenId) == auction.seller, 
-            "Seller no longer owns NFT");
-        require(nftContract.isApprovedForAll(auction.seller, address(this)) || 
-                nftContract.getApproved(auction.tokenId) == address(this), 
-                "Contract not approved for NFT transfer");
-
-        // 先转移代币，再移NFT（防止重入攻）
-        require(myERC20Token.transfer(auction.seller, auction.finalPrice), 
-            "Payment transfer failed");
-        emit PaymentSettled(auctionId, auction.seller, auction.highestBidder, auction.finalPrice, block.timestamp);
-
-        // 转移NFT
-        try nftContract.safeTransferFrom(auction.seller, auction.highestBidder, auction.tokenId) {
-            emit NFTTransferred(auctionId, auction.seller, auction.highestBidder, auction.nftContract, auction.tokenId, block.timestamp);
-        } catch {
-            // NFT转移失败，回滚支付
-            require(myERC20Token.transfer(address(this), auction.finalPrice), 
-                "Payment revert failed");
-            auction.isPaymentTransferred = false;
-            auction.isNFTTransferred = false;
-            auction.auctionStatus = AuctionStatus.Ongoing;
-            revert("NFT transfer failed");
-        }
-
-        emit AuctionEnded(auctionId, auction.highestBidder, auction.finalPrice, endTime);
+        
+        return auction.startingPrice - totalDecrement;
     }
 
     // 添加访问控制
@@ -453,16 +463,16 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         Auction storage auction = auctions[auctionId];
         require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction not ongoing");
         
-        auction.auctionStatus = AuctionStatus.Ended;
+        auction.auctionStatus = AuctionStatus.Cancelled;
         
         // 如果有出价，退还出价
-        if (auction.highestBidder != address(0)) {
+        if (auction.winner != address(0)) {
             if (auction.auctionType == AuctionType.EnglishAuction) {
-                require(myERC20Token.transfer(auction.highestBidder, 
-                    auction.englishAuction.currentBid), "Refund failed");
+                require(daToken.transfer(auction.winner, 
+                    auction.currentBid), "Refund failed");
             } else {
-                require(myERC20Token.transfer(auction.highestBidder, 
-                    auction.dutchAuction.currentPrice), "Refund failed");
+                require(daToken.transfer(auction.winner, 
+                    auction.currentPrice), "Refund failed");
             }
         }
         
@@ -476,12 +486,18 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
         Auction storage auction = auctions[auctionId];
         
-        // 状检查
-        require(auction.auctionStatus == AuctionStatus.Ended, "Auction not ended");
+        // 状态检查
+        // 检查拍卖是否已结束（成功或失败）
+        require(
+            auction.auctionStatus == AuctionStatus.Succeeded || 
+            auction.auctionStatus == AuctionStatus.Failed ||
+            auction.auctionStatus == AuctionStatus.Cancelled,
+            "Auction still ongoing"
+        );
         require(auction.hasDeposited[msg.sender], "No deposit found");
 
         // 确保该用户没有成为赢家
-        require(msg.sender != auction.highestBidder, "Winner cannot refund deposit");
+        require(msg.sender != auction.winner, "Winner cannot refund deposit");
 
         // 检查是否已经退还过
         require(auction.hasDeposited[msg.sender], "Deposit already refunded");
@@ -491,14 +507,14 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         require(depositAmount > 0, "Invalid deposit amount");
 
         // 检查合约余额
-        require(myERC20Token.balanceOf(address(this)) >= depositAmount, 
+        require(daToken.balanceOf(address(this)) >= depositAmount, 
             "Insufficient contract balance");
 
         // 先修改状态再转账（防止重入攻击）
         auction.hasDeposited[msg.sender] = false;
 
         // 安全转账
-        bool success = myERC20Token.transfer(msg.sender, depositAmount);
+        bool success = daToken.transfer(msg.sender, depositAmount);
         require(success, "Transfer failed");
 
         emit DepositHandled(auctionId, msg.sender, depositAmount, false, block.timestamp);
@@ -511,18 +527,25 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     ) external onlyRole(ADMIN_ROLE) nonReentrant {
         require(_auctionIdExist[auctionId], "Auction does not exist");
         Auction storage auction = auctions[auctionId];
-        require(auction.auctionStatus == AuctionStatus.Ended, "Auction not ended");
+         // 检查拍卖是否已结束（成功或失败）
+        require(
+            auction.auctionStatus == AuctionStatus.Succeeded || 
+            auction.auctionStatus == AuctionStatus.Failed ||
+            auction.auctionStatus == AuctionStatus.Cancelled,
+            "Auction still ongoing"
+        );
+
 
         for (uint i = 0; i < depositors.length; i++) {
             address depositor = depositors[i];
             if (depositor != address(0) && 
                 auction.hasDeposited[depositor] && 
-                depositor != auction.highestBidder) {
+                depositor != auction.winner) {
                 
                 uint depositAmount = auction.depositAmount;
                 auction.hasDeposited[depositor] = false;
                 
-                bool success = myERC20Token.transfer(depositor, depositAmount);
+                bool success = daToken.transfer(depositor, depositAmount);
                 require(success, "Transfer failed");
                 
                 emit DepositHandled(auctionId, depositor, depositAmount, false, block.timestamp);
@@ -539,8 +562,8 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         require(to != address(0), "Invalid address");
         require(amount > 0, "Invalid amount");
         
-        if (token == address(myERC20Token)) {
-            require(myERC20Token.transfer(to, amount), "Transfer failed");
+        if (token == address(daToken)) {
+            require(daToken.transfer(to, amount), "Transfer failed");
         } else {
             IERC20 tokenContract = IERC20(token);
             require(tokenContract.transfer(to, amount), "Transfer failed");
@@ -569,7 +592,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     //             // 荷兰拍卖需要更新价格，且未结束且有出价者
     //             if (auction.auctionType == AuctionType.DutchAuction) {
     //                 // 检查是否有最高出价者，若有，则认为拍卖结束
-    //                 if (auction.highestBidder != address(0)) {
+    //                 if (auction.winner != address(0)) {
     //                     upkeepNeeded = true;
     //                     auctions2End.push(i);  // 如果有出价者，结束拍卖
     //                 }
@@ -602,23 +625,159 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     //     }
     // }
 
-    function getCurrentPrice(uint256 auctionId) public view returns (uint256) {
+    // 内部函数：完成拍卖
+    function _completeAuction(uint auctionId) internal {
         Auction storage auction = auctions[auctionId];
-        require(auction.auctionType == AuctionType.DutchAuction, "Not a Dutch auction");
+        require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction not ongoing");
         
-        if (block.timestamp >= auction.dutchAuction.auctionEndTime) {
-            return auction.dutchAuction.endPrice;
+        if (auction.auctionType == AuctionType.EnglishAuction) {
+            if (auction.currentBid >= auction.reservePrice) {
+                // 达到保留价，拍卖成功
+                auction.auctionStatus = AuctionStatus.Succeeded;
+                auction.finalPrice = auction.currentBid;  // 设置最终价格
+                
+                // 计算手续费
+                uint feeAmount = calculateFee(auction.finalPrice);
+                uint sellerAmount = auction.finalPrice - feeAmount;
+                
+                // 转移 NFT 给最高出价者
+                IERC721(auction.nftContract).transferFrom(
+                    address(this),
+                    auction.winner,
+                    auction.tokenId
+                );
+                auction.isNFTTransferred = true;
+
+                // 转移代币给卖家（扣除手续费）
+                daToken.transfer(auction.seller, sellerAmount);
+                // 转移手续费给管理员
+                daToken.transfer(owner(), feeAmount);
+                
+                auction.isPaymentTransferred = true;
+
+                emit AuctionEnded(
+                    auctionId,
+                    auction.winner,
+                    auction.finalPrice,
+                    block.timestamp
+                );
+                emit FeeCollected(auctionId, feeAmount);
+            } else {
+                // 未达到保留价，拍卖失败
+                auction.auctionStatus = AuctionStatus.Failed;
+                
+                // 退还 NFT 给卖家
+                IERC721(auction.nftContract).transferFrom(
+                    address(this),
+                    auction.seller,
+                    auction.tokenId
+                );
+                auction.isNFTTransferred = true;
+
+                emit AuctionEnded(
+                    auctionId,
+                    address(0),
+                    0,
+                    block.timestamp
+                );
+            }
+        } else if (auction.auctionType == AuctionType.DutchAuction) {
+            if (auction.winner != address(0) && auction.currentPrice >= auction.minimumPrice) {
+                // 有人购买且价格合适，拍卖成功
+                auction.auctionStatus = AuctionStatus.Succeeded;
+                auction.finalPrice = auction.currentPrice;  // 设置最终价格
+                
+                // 计算手续费
+                uint feeAmount = calculateFee(auction.finalPrice);
+                uint sellerAmount = auction.finalPrice - feeAmount;
+                
+                // 转移 NFT 给购买者
+                IERC721(auction.nftContract).transferFrom(
+                    address(this),
+                    auction.winner,
+                    auction.tokenId
+                );
+                auction.isNFTTransferred = true;
+
+                // 转移代币给卖家（扣除手续费）
+                daToken.transfer(auction.seller, sellerAmount);
+                // 转移手续费给管理员
+                daToken.transfer(owner(), feeAmount);
+                
+                auction.isPaymentTransferred = true;
+
+                emit AuctionEnded(
+                    auctionId,
+                    auction.winner,
+                    auction.finalPrice,
+                    block.timestamp
+                );
+                emit FeeCollected(auctionId, feeAmount);
+            } else {
+                // 无人购买或价格过低，拍卖失败
+                auction.auctionStatus = AuctionStatus.Failed;
+                
+                // 退还 NFT 给卖家
+                IERC721(auction.nftContract).transferFrom(
+                    address(this),
+                    auction.seller,
+                    auction.tokenId
+                );
+                auction.isNFTTransferred = true;
+
+                emit AuctionEnded(
+                    auctionId,
+                    address(0),
+                    0,
+                    block.timestamp
+                );
+            }
         }
-        
-        uint256 elapsed = block.timestamp - auction.dutchAuction.lastUpdateTime;
-        uint256 intervals = elapsed / auction.dutchAuction.decrementInterval;
-        uint256 totalDecrement = intervals * auction.dutchAuction.priceDecrement;
-        
-        if (auction.dutchAuction.startingPrice - totalDecrement < auction.dutchAuction.endPrice) {
-            return auction.dutchAuction.endPrice;
-        }
-        
-        return auction.dutchAuction.startingPrice - totalDecrement;
+    }
+
+
+    // 手续费相关
+    uint public feeRate = 500;  // 基点制：500 = 5%
+    uint public constant MAX_FEE_RATE = 2000; // 最大 20%
+
+    event FeeRateUpdated(uint oldFeeRate, uint newFeeRate);
+    event FeeCollected(uint auctionId, uint amount);
+
+    function setFeeRate(uint newFeeRate) external onlyRole(ADMIN_ROLE) {
+        require(newFeeRate <= MAX_FEE_RATE, "Fee rate too high");
+        uint oldFeeRate = feeRate;
+        feeRate = newFeeRate;
+        emit FeeRateUpdated(oldFeeRate, newFeeRate);
+    }
+
+    // 计算手续费
+    function calculateFee(uint amount) public view returns (uint) {
+        return amount * feeRate / 10000;
+    }
+
+    function withdrawDeposit(uint auctionId) public nonReentrant {
+        Auction storage auction = auctions[auctionId];
+        // 检查拍卖是否已结束（成功或失败）
+        require(
+            auction.auctionStatus == AuctionStatus.Succeeded || 
+            auction.auctionStatus == AuctionStatus.Failed ||
+            auction.auctionStatus == AuctionStatus.Cancelled,
+            "Auction still ongoing"
+        );
+        require(auction.hasDeposited[msg.sender], "No deposit found");
+        require(msg.sender != auction.winner, "Winner cannot withdraw deposit");
+
+        // 退还保证金
+        auction.hasDeposited[msg.sender] = false;
+        require(daToken.transfer(msg.sender, auction.depositAmount), "Transfer failed");
+
+        emit DepositHandled(
+            auctionId,
+            msg.sender,
+            auction.depositAmount,
+            false,  // false 表示退还
+            block.timestamp
+        );
     }
 
 }

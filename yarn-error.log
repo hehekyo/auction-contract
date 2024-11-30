@@ -1,5 +1,5 @@
 Arguments: 
-  /usr/local/bin/node /usr/local/bin/yarn add axios form-data
+  /usr/local/bin/node /usr/local/bin/yarn install
 
 PATH: 
   /opt/homebrew/anaconda3/bin:/opt/homebrew/anaconda3/condabin:/Users/alex/Downloads/google-cloud-sdk/bin:/opt/homebrew/Cellar/pyenv-virtualenv/1.2.4/shims:/Users/alex/.pyenv/shims:/opt/homebrew/opt/mongodb-community@4.4/bin:/Users/alex/.rbenv/shims:/Users/alex/.gem/bin:/Users/alex/Documents/app/flutter-3.0.2/bin:/Users/alex/bin:/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/usr/local/go/bin:/Users/alex/.pub-cache/bin:/usr/bin/java:/Users/alex/.rvm/bin:/Users/alex/Documents/dev/env/apache-maven-3.8.5/bin:/opt/homebrew/anaconda3/bin:/Applications/flutter/bin:/Applications/flutter/bin/cache/dart-sdk/bin:/usr/local/mysql/bin:/Users/alex/go/bin:/Users/alex/Library/Python/3.9/bin
@@ -14,11 +14,12 @@ Platform:
   darwin arm64
 
 Trace: 
-  Error: ENOSPC: no space left on device, copyfile '/Users/alex/Documents/dev/code/web3/auction-contract/node_modules/.pnpm/lodash@4.17.21/node_modules/lodash/now.js' -> '/Users/alex/Library/Caches/Yarn/v6/npm-auction-contract-1.0.0-f87b29bd-cffb-451d-885d-919e64dfbd7b-1732781538770/node_modules/auction-contract/node_modules/.pnpm/lodash@4.17.21/node_modules/lodash/now.js'
+  Error: ENOSPC: no space left on device, copyfile '/Users/alex/Documents/dev/code/web3/auction-contract/node_modules/auction-contract/node_modules/.ignored_auction-contract/node_modules/@nomicfoundation/ethereumjs-tx/dist/cjs/util.js.map' -> '/Users/alex/Library/Caches/Yarn/v6/npm-auction-contract-1.0.0-7a3ca212-df1f-4016-a92d-7b79eecd7059-1732883487722/node_modules/auction-contract/node_modules/auction-contract/node_modules/.ignored_auction-contract/node_modules/@nomicfoundation/ethereumjs-tx/dist/cjs/util.js.map'
 
 npm manifest: 
   {
     "name": "auction-contract",
+    "type": "module",
     "version": "1.0.0",
     "main": "index.js",
     "scripts": {
@@ -36,7 +37,8 @@ npm manifest:
       "transfer": "npx hardhat run scripts/transfer-dev.js --network localhost",
       "auction:info": "npx hardhat run scripts/show-info.ts --network localhost",
       "auction:events": "npx hardhat run scripts/query-auction-events.ts --network localhost",
-      "upload-nfts": "node scripts/upload-nfts.js"
+      "upload-nfts": "node scripts/upload-nfts.js",
+      "list-files": "node scripts/list-files.js"
     },
     "author": "",
     "license": "ISC",
@@ -74,7 +76,14 @@ npm manifest:
       "auction-contract": "file:",
       "chai-as-promised": "^8.0.0",
       "mime": "^4.0.4",
-      "nft.storage": "^7.2.0"
+      "nft.storage": "^7.2.0",
+      "@types/node": "^20.10.0",
+      "@typescript-eslint/eslint-plugin": "^6.12.0",
+      "@typescript-eslint/parser": "^6.12.0",
+      "eslint": "^8.54.0",
+      "prettier": "^3.1.0",
+      "ts-node": "^10.9.1",
+      "typescript": "^5.3.2"
     }
   }
 
