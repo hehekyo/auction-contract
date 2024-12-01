@@ -8,6 +8,13 @@ contract DANFT is ERC721, Ownable {
     mapping(uint256 => string) private _imageURIs;
     uint256 public tokenCounter;
 
+    event NFTMinted(
+        uint256 indexed tokenId,
+        address indexed to,
+        string imageURI,
+        uint256 timestamp
+    );
+
     function _exists(uint256 tokenId) internal view returns (bool) {
         return _ownerOf(tokenId) != address(0);
     }
@@ -21,6 +28,9 @@ contract DANFT is ERC721, Ownable {
         require(bytes(imageURI).length > 0, "Image URI cannot be empty");
         uint256 newTokenId = tokenCounter;
         _mintWithURI(msg.sender, newTokenId, imageURI);
+        
+        emit NFTMinted(newTokenId, msg.sender, imageURI, block.timestamp);
+        
         tokenCounter++;
     }
 
@@ -28,6 +38,9 @@ contract DANFT is ERC721, Ownable {
     function mint(address to, uint256 tokenId, string memory imageURI) public onlyOwner {
         require(bytes(imageURI).length > 0, "Image URI cannot be empty");
         _mintWithURI(to, tokenId, imageURI);
+        
+        emit NFTMinted(tokenId, to, imageURI, block.timestamp);
+        
         if (tokenId >= tokenCounter) {
             tokenCounter = tokenId + 1;
         }

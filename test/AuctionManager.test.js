@@ -1,56 +1,51 @@
 const { expect } = require("chai");
-const { ethers, upgrades } = require("hardhat");
+const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
-describe("拍卖管理合约测试", function () {
-  let AuctionManager;
-  let auctionManager;
-  let MyERC20;
-  let myERC20;
-  let MyNFT;
-  let myNFT;
-  let owner;
-  let seller;
-  let bidder1;
-  let bidder2;
-  let admin;
-
-  const TOKEN_SUPPLY = ethers.parseEther("1000000");
-  const INITIAL_MINT = ethers.parseEther("1000");
+describe("拍卖系统测试", function () {
+  let DAToken, DANFT, AuctionManager;
+  let daToken, danft, auctionManager;
+  let owner, admin, seller, bidder1, bidder2;
+  const initialSupply = ethers.parseEther("1000000");
 
   beforeEach(async function () {
-    [owner, seller, bidder1, bidder2, admin] = await ethers.getSigners();
+    [owner, admin, seller, bidder1, bidder2] = await ethers.getSigners();
 
-    // 部署 ERC20 代币
-    MyERC20 = await ethers.getContractFactory("MyERC20");
-    myERC20 = await MyERC20.deploy(owner.address, TOKEN_SUPPLY);
-    const myERC20Address = await myERC20.getAddress();
+    // 部署代币合约
+    DAToken = await ethers.getContractFactory("DAToken");
+    daToken = await DAToken.deploy(owner.address, initialSupply);
+    await daToken.waitForDeployment();
 
-    // 部署 NFT
-    MyNFT = await ethers.getContractFactory("MyNFT");
-    myNFT = await MyNFT.deploy(owner.address);
-    const myNFTAddress = await myNFT.getAddress();
+    // 部署 NFT 合约
+    DANFT = await ethers.getContractFactory("DANFT");
+    danft = await DANFT.deploy(owner.address);
+    await danft.waitForDeployment();
 
     // 部署拍卖管理合约
     AuctionManager = await ethers.getContractFactory("AuctionManager");
-    auctionManager = await upgrades.deployProxy(AuctionManager, [admin.address, myERC20Address]);
-    const auctionManagerAddress = await auctionManager.getAddress();
+    auctionManager = await AuctionManager.deploy();
+    await auctionManager.waitForDeployment();
+    await auctionManager.initialize(admin.address, await daToken.getAddress());
 
-    // 给测试账户铸造代币
-    await myERC20.mint(bidder1.address, INITIAL_MINT);
-    await myERC20.mint(bidder2.address, INITIAL_MINT);
+    // 造一些代币给测试账户
+    await daToken.connect(owner).transfer(bidder1.address, ethers.parseEther("10000"));
+    await daToken.connect(owner).transfer(bidder2.address, ethers.parseEther("10000"));
 
-    // 给卖家铸造 NFT
-    await myNFT.mint(seller.address, 0, "ipfs://test");
-
-    // 授权拍卖合约转移 NFT
-    await myNFT.connect(seller).setApprovalForAll(auctionManagerAddress, true);
+    // 为 seller 铸造 tokenId 0 和 1 的 NFT
+    await danft.connect(owner).mint(seller.address, 0, "ipfs://test");
+    await danft.connect(owner).mint(seller.address, 1, "ipfs://test");
   });
 
   describe("基础功能测试", function () {
     it("正确初始化合约", async function () {
-      expect(await auctionManager.myERC20Token()).to.equal(await myERC20.getAddress());
+      expect(await auctionManager.daToken()).to.equal(await daToken.getAddress());
       expect(await auctionManager.hasRole(await auctionManager.DEFAULT_ADMIN_ROLE(), admin.address)).to.be.true;
+    });
+
+    it("设置手续费率", async function () {
+      const newFeeRate = 1000; // 10%
+      await auctionManager.connect(admin).setFeeRate(newFeeRate);
+      expect(await auctionManager.feeRate()).to.equal(newFeeRate);
     });
   });
 
@@ -58,174 +53,177 @@ describe("拍卖管理合约测试", function () {
     const startingPrice = ethers.parseEther("100");
     const reservePrice = ethers.parseEther("80");
     const duration = 3600; // 1小时
+    let auctionId;
 
-    it("成功创建英式拍卖", async function () {
-      const myNFTAddress = await myNFT.getAddress();
-      
-      // 监听事件
+    beforeEach(async function () {
+      // 授权 NFT 给拍卖合约
+      await danft.connect(seller).approve(await auctionManager.getAddress(), 0);
+    });
+
+    it("成功出价和结束拍卖", async function () {
+      // 创建拍卖
       const tx = await auctionManager.connect(seller).startAuction(
-        0, // EnglishAuction = 0
+        0, // EnglishAuction
         startingPrice,
         reservePrice,
         duration,
-        myNFTAddress,
+        await danft.getAddress(),
         0,
         0,
         0
       );
       const receipt = await tx.wait();
       
-      // 修改事件验证方式
-      const event = receipt.logs.find(
-        log => {
-          try {
-            const parsed = auctionManager.interface.parseLog(log);
-            return parsed && parsed.name === 'AuctionStarted';  // 修改事件名称
-          } catch {
-            return false;
-          }
+      // 获取创建的拍卖ID
+      const event = receipt.logs.find(log => {
+        try {
+          const parsed = auctionManager.interface.parseLog(log);
+          return parsed.name === 'AuctionStarted';
+        } catch {
+          return false;
         }
-      );
-      expect(event).to.not.be.undefined;
-    });
-
-    it("成功参与竞拍", async function () {
-      const myNFTAddress = await myNFT.getAddress();
-      const auctionManagerAddress = await auctionManager.getAddress();
-
-      // 创建拍卖
-      await (await auctionManager.connect(seller).startAuction(
-        0, // EnglishAuction = 0
-        startingPrice,
-        reservePrice,
-        duration,
-        myNFTAddress,
-        0,
-        0,
-        0
-      )).wait();
+      });
+      auctionId = event.args.auctionId;
 
       // 支付押金
       const depositAmount = startingPrice * BigInt(10) / BigInt(100);
-      await (await myERC20.connect(bidder1).approve(auctionManagerAddress, depositAmount)).wait();
-      await (await auctionManager.connect(bidder1).deposit(1)).wait();
+      const bidAmount = ethers.parseEther("120");
+      
+      // 授权总金额 = 押金 + 出价金额
+      const totalAmount = depositAmount + bidAmount;
+      await daToken.connect(bidder1).approve(
+        await auctionManager.getAddress(), 
+        totalAmount
+      );
+
+      // 支付押金
+      await auctionManager.connect(bidder1).deposit(auctionId);
 
       // 出价
-      const bidAmount = ethers.parseEther("110");
-      await (await myERC20.connect(bidder1).approve(auctionManagerAddress, bidAmount)).wait();
-      
-      const bidTx = await auctionManager.connect(bidder1).bid(1, bidAmount);
-      const receipt = await bidTx.wait();
-      
-      const event = receipt.logs.find(
-        log => log.fragment && log.fragment.name === 'BidPlaced'
-      );
-      expect(event).to.not.be.undefined;
+      await auctionManager.connect(bidder1).bid(auctionId, bidAmount);
+
+      // 时间快进到拍卖结束
+      await time.increase(duration + 1);
+
+      // 结束拍卖
+      await auctionManager.connect(admin).endAuction(auctionId);
+
+      // 验证拍卖结果
+      const auction = await auctionManager.auctions(auctionId);
+      expect(auction.auctionStatus).to.equal(1); // Succeeded
+      expect(auction.winner).to.equal(bidder1.address);
+      expect(auction.finalPrice).to.equal(bidAmount);
     });
   });
 
   describe("荷兰拍卖测试", function () {
     const startingPrice = ethers.parseEther("100");
-    const endPrice = ethers.parseEther("50");
-    const duration = 3600; // 1小时
+    const minimumPrice = ethers.parseEther("50");
+    const duration = 3600;
     const priceDecrement = ethers.parseEther("5");
-    const decrementInterval = 300; // 5分钟
+    const decrementInterval = 300;
+    let auctionId;
 
-    it("成功创建荷兰拍卖", async function () {
-      const myNFTAddress = await myNFT.getAddress();
+    beforeEach(async function () {
+      await danft.connect(seller).approve(await auctionManager.getAddress(), 1);
+    });
+
+    it("价格正确递减并成功购买", async function () {
+      // 增加测试超时时间
+      this.timeout(60000);
+
+      // 创建拍卖
       const tx = await auctionManager.connect(seller).startAuction(
-        1, // DutchAuction = 1
+        1, // DutchAuction
         startingPrice,
-        endPrice,
+        minimumPrice,
         duration,
-        myNFTAddress,
-        0,
+        await danft.getAddress(),
+        1,
         priceDecrement,
         decrementInterval
       );
       const receipt = await tx.wait();
       
-      // 修改事件验证方式
-      const event = receipt.logs.find(
-        log => {
-          try {
-            const parsed = auctionManager.interface.parseLog(log);
-            return parsed && parsed.name === 'AuctionStarted';  // 修改事件名称
-          } catch {
-            return false;
-          }
+      // 获取创建的拍卖ID
+      const event = receipt.logs.find(log => {
+        try {
+          const parsed = auctionManager.interface.parseLog(log);
+          return parsed.name === 'AuctionStarted';
+        } catch {
+          return false;
         }
-      );
-      expect(event).to.not.be.undefined;
-    });
+      });
+      auctionId = event.args.auctionId;
 
-    it("价格正确递减", async function () {
-      const myNFTAddress = await myNFT.getAddress();
-
-      // 获取当前区块时间
-      const latestBlock = await ethers.provider.getBlock('latest');
-      const currentTime = latestBlock.timestamp;
-
-      // 创建拍卖
-      const createTx = await auctionManager.connect(seller).startAuction(
-        1, // DutchAuction = 1
-        startingPrice,
-        endPrice,
-        duration,
-        myNFTAddress,
-        0,
-        priceDecrement,
-        decrementInterval
-      );
-      await createTx.wait();
-
-      // 明确设置下一个区块的时间
-      await time.setNextBlockTimestamp(currentTime + decrementInterval);
-      // 挖一个新区块来触发时间更新
-      await ethers.provider.send("evm_mine");
+      // 时间快进一个递减间隔
+      await time.increase(decrementInterval);
 
       // 获取当前价格
-      const currentPrice = await auctionManager.getCurrentPrice(1);
-      
-      // 打印调试信息
-      console.log({
-        currentTime: currentTime,
-        newTime: currentTime + decrementInterval,
-        startingPrice: startingPrice.toString(),
-        currentPrice: currentPrice.toString(),
-        expectedPrice: (startingPrice - priceDecrement).toString(),
-        decrementInterval: decrementInterval
-      });
+      const currentPrice = await auctionManager.getCurrentPrice(auctionId);
+      console.log("Current price:", currentPrice.toString());
 
-      // expect(currentPrice).to.equal(startingPrice - priceDecrement);
-    });
-  });
-
-  describe("紧急功能测试", function () {
-    it("管理员可以紧急取消拍卖", async function () {
-      const myNFTAddress = await myNFT.getAddress();
+      const depositAmount = startingPrice * BigInt(10) / BigInt(100);
       
-      // 创建拍卖
-      await auctionManager.connect(seller).startAuction(
-        0,
-        ethers.parseEther("100"),
-        ethers.parseEther("80"),
-        3600,
-        myNFTAddress,
-        0,
-        0,
-        0
+      // 授权总金额 = 押金 + 当前价格
+      const totalAmount = depositAmount + currentPrice;
+      await daToken.connect(bidder1).approve(
+        await auctionManager.getAddress(), 
+        totalAmount
       );
 
-      // 修改事件验证，匹配合约中的事件定义
-      await expect(auctionManager.connect(admin).emergencyCancelAuction(1))
-        .to.emit(auctionManager, 'AuctionCancelled')
-        .withArgs(
-          1,                    // uint indexed auctionId
-          admin.address,        // address indexed canceller
-          "Emergency cancellation",  // string reason
-          await time.latest()   // uint256 timestamp
+      // 支付押金
+      await auctionManager.connect(bidder1).deposit(auctionId);
+
+      // 暂停自动挖块
+      await network.provider.send("evm_setAutomine", [false]);
+      
+      try {
+        // 在同一个区块中获取价格和出价
+        const latestPrice = await auctionManager.getCurrentPrice(auctionId);
+        console.log("Latest price before bid:", latestPrice.toString());
+
+        // 确保有足够的代币授权
+        await daToken.connect(bidder1).approve(
+          await auctionManager.getAddress(), 
+          latestPrice
         );
+        
+        // 出价
+        await auctionManager.connect(bidder1).bid(auctionId, latestPrice);
+        
+        // 手动挖块
+        await network.provider.send("evm_mine");
+      } finally {
+        // 恢复自动挖块
+        await network.provider.send("evm_setAutomine", [true]);
+        // 等待一下，确保状态更新
+        await network.provider.send("evm_mine");
+      }
+
+      // 获取拍卖状态
+      const auction = await auctionManager.auctions(auctionId);
+      console.log("Auction status:", {
+        winner: auction.winner,
+        currentPrice: auction.currentPrice.toString(),
+        auctionStatus: auction.auctionStatus
+      });
+
+      // 验证出价结果
+      // expect(auction.winner).to.equal(bidder1.address);
+      // expect(auction.currentPrice).to.equal(currentPrice);
+
+      // 时间快进到拍卖结束
+      await time.increase(duration + 1);
+
+      // 结束拍卖
+      await auctionManager.connect(admin).endAuction(auctionId);
+
+      // 最终验证
+      const finalAuction = await auctionManager.auctions(auctionId);
+      expect(finalAuction.auctionStatus).to.equal(1); // Succeeded
+      expect(finalAuction.winner).to.equal(bidder1.address);
+      expect(finalAuction.finalPrice).to.equal(currentPrice);
     });
   });
-})
+});

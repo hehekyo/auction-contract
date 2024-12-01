@@ -2,7 +2,7 @@ const { ethers } = require("hardhat");
 const { getDeployedAddresses } = require("../utils/address-helper");
 
 // Define common constants
-const DEPOSIT_AMOUNT = ethers.parseEther("0.01"); // 0.01 token deposit for all auctions
+const DEPOSIT_AMOUNT = ethers.parseEther("10"); // 0.01 token deposit for all auctions
 const INITIAL_ETH_BALANCE = ethers.parseEther("100"); // 100 ETH
 const INITIAL_TOKEN_BALANCE = ethers.parseEther("10000"); // 10000 tokens
 const ADDITIONAL_TOKENS = ethers.parseEther("100"); // 100 additional tokens for addr1
@@ -83,17 +83,23 @@ async function main() {
         console.log("NFT 铸造完成，开始分配...");
 
         // 分配给 addr1 (前10个)
+        console.log("\n=== 转移 NFT 给 addr1 ===");
         for(let i = 10; i < 20; i++) {
             try {
-                // 确保NFT存在并且owner拥有它
                 const tokenId = nftIds[i];
-                const currentOwner = await daNFT.ownerOf(tokenId);
+                console.log(`\n处理 NFT #${tokenId}...`);
                 
-                if (currentOwner !== owner.address) {
-                    console.log(`跳过 NFT #${tokenId}，当前有者不是owner`);
+                // 检查当前所有者
+                const currentOwner = await daNFT.ownerOf(tokenId);
+                console.log(`当前所有者: ${currentOwner}`);
+                console.log(`目标所有者 (addr1): ${addr1.address}`);
+                
+                if (currentOwner.toLowerCase() !== owner.address.toLowerCase()) {
+                    console.log(`跳过 NFT #${tokenId}，当前所有者不是owner`);
                     continue;
                 }
 
+                // 使用 transferFrom 而不是 mint
                 console.log(`转移 NFT #${tokenId} 给 addr1...`);
                 const tx = await daNFT.connect(owner)["safeTransferFrom(address,address,uint256)"](
                     owner.address,
@@ -104,11 +110,30 @@ async function main() {
                 
                 // 验证转移
                 const newOwner = await daNFT.ownerOf(tokenId);
-                console.log(`NFT #${tokenId} 转移成功，新所有者: ${newOwner}`);
+                console.log(`新所有者: ${newOwner}`);
+                
+                if (newOwner.toLowerCase() !== addr1.address.toLowerCase()) {
+                    throw new Error(`NFT #${tokenId} 转移失败，当前所有者: ${newOwner}`);
+                }
+                console.log(`NFT #${tokenId} 转移成功`);
             } catch (error) {
-                console.error(`转移 NFT ${nftIds[i]} 给 addr1 失败:`, error);
-                // 继续处理下一个，而不是直接抛出错误
-                continue;
+                console.error(`处理 NFT ${nftIds[i]} 失败:`, error);
+                throw error;
+            }
+        }
+
+        // 验证 addr1 的 NFT 余额
+        const addr1Balance = await daNFT.balanceOf(addr1.address);
+        console.log(`\naddr1 的 NFT 余额: ${addr1Balance}`);
+
+        // 打印 addr1 拥有的所有 NFT
+        console.log("\naddr1 拥有的 NFT:");
+        for(let i = 0; i < addr1Balance; i++) {
+            try {
+                const tokenId = await daNFT.tokenOfOwnerByIndex(addr1.address, i);
+                console.log(`TokenID: ${tokenId}`);
+            } catch (error) {
+                console.error(`获取 TokenID 失败: ${error}`);
             }
         }
 
@@ -190,7 +215,7 @@ async function main() {
         //     nftContract: await daNFT.getAddress(),
         //     tokenId: nftIds[0],                        // owner的第一个NFT
         //     priceDecrement: ethers.parseEther("0.01"), // 每次降价 0.01 代币
-        //     decrementInterval: 300                     // 每5分钟降价一��
+        //     decrementInterval: 300                     // 每5分钟降价一
         // };
 
         // // 先授权 NFT 给拍卖合约
@@ -249,8 +274,8 @@ async function main() {
         // 英式拍卖参数
         const englishAuctionParams = {
             auctionType: 0, // EnglishAuction
-            startingPrice: ethers.parseEther("0.05"),  // 起拍价 0.05 代币
-            reservePrice: ethers.parseEther("0.01"),   // 保留价 0.01 代币
+            startingPrice: ethers.parseEther("50"),  // 起拍价 0.05 代币
+            reservePrice: ethers.parseEther("30"),   // 保留价 0.01 代币
             duration: 3600,                            // 1小时
             nftContract: await daNFT.getAddress(),
             tokenId: nftIds[10],                       // addr1的第一个NFT
@@ -294,7 +319,7 @@ async function main() {
                 // 使用 AuctionStarted 事件名称
                 if (parsedLog && parsedLog.name === 'AuctionStarted') {
                     englishAuctionId = parsedLog.args[0]; // auctionId 是第一个参数
-                    console.log(`英式拍卖创建成功，拍卖ID: ${englishAuctionId}`);
+                    console.log(`英式卖创建成功，拍卖ID: ${englishAuctionId}`);
                     foundAuctionId = true;
                     break;
                 }
@@ -316,7 +341,7 @@ async function main() {
         console.log("\n英式拍卖出价测试：");
         
         // addr2 出价 0.06 代币
-        const englishBidAmount1 = ethers.parseEther("0.06");
+        const englishBidAmount1 = ethers.parseEther("55");
         console.log("addr2 出价 0.06 代币...");
         
         // 先授权代币用于保证金
@@ -356,13 +381,13 @@ async function main() {
         }
 
         // owner 出价 0.07 代币
-        const englishBidAmount2 = ethers.parseEther("0.07");
+        const englishBidAmount2 = ethers.parseEther("60");
         console.log("\nowner 出价 0.07 代币...");
         
         // 先授权代币用于保证金
         console.log("授权代币用于保证金...");
         await daToken.connect(owner).approve(auctionManagerAddress, DEPOSIT_AMOUNT);
-        console.log("保证金代币授权完成");
+        console.log("证金代币授权完成");
         
         // 支付保证金
         console.log("支付保证金...");
@@ -480,8 +505,8 @@ async function main() {
         // console.log("出价完成");
         // await printEventLogs(receipt);
 
-        // // 显示最终状
-        // console.log("\n=== 最终状态 ===");
+        // // 示最终状
+        // console.log("\n=== 终状态 ===");
         // console.log("代币余额：");
         // console.log("Owner:", ethers.formatEther(await daToken.balanceOf(owner.address)));
         // console.log("Addr1:", ethers.formatEther(await daToken.balanceOf(addr1.address)));
@@ -498,8 +523,8 @@ async function main() {
         // Common parameters for English auctions
         const baseEnglishAuctionParams = {
             auctionType: 0, // EnglishAuction
-            startingPrice: ethers.parseEther("0.05"),  // 0.05 tokens
-            reservePrice: ethers.parseEther("0.01"),   // 0.01 tokens
+            startingPrice: ethers.parseEther("60"),  // 0.05 tokens
+            reservePrice: ethers.parseEther("50"),   // 0.01 tokens
             duration: 3600,                            // 1 hour
             nftContract: await daNFT.getAddress(),
             priceDecrement: 0,                         // not used in English auction
@@ -514,6 +539,24 @@ async function main() {
             
             console.log(`\nCreating English Auction #${i + 1} for NFT #${tokenId}`);
             
+            // 打印所有相关地址
+            console.log("Debug info:");
+            console.log("addr1 address:", addr1.address);
+            console.log("owner address:", owner.address);
+            console.log("NFT contract address:", await daNFT.getAddress());
+            
+            // 验证 NFT 所有权
+            const currentOwner = await daNFT.ownerOf(tokenId);
+            console.log(`Current owner of NFT #${tokenId}: ${currentOwner}`);
+            
+            // 检查 NFT 余额
+            const addr1Balance = await daNFT.balanceOf(addr1.address);
+            console.log(`addr1's NFT balance: ${addr1Balance}`);
+            
+            if (currentOwner.toLowerCase() !== addr1.address.toLowerCase()) {
+                throw new Error(`NFT #${tokenId} is not owned by addr1 (${addr1.address}), current owner: ${currentOwner}`);
+            }
+
             // Approve NFT for auction
             console.log("Approving NFT...");
             const approveTx = await daNFT.connect(addr1).approve(auctionManagerAddress, tokenId);
@@ -522,20 +565,15 @@ async function main() {
 
             // Create auction
             console.log("Creating auction...");
-            const auctionParams = {
-                ...baseEnglishAuctionParams,
-                tokenId: tokenId
-            };
-
             const tx = await auctionManager.connect(addr1).startAuction(
-                auctionParams.auctionType,
-                auctionParams.startingPrice,
-                auctionParams.reservePrice,
-                auctionParams.duration,
-                auctionParams.nftContract,
-                auctionParams.tokenId,
-                auctionParams.priceDecrement,
-                auctionParams.decrementInterval
+                baseEnglishAuctionParams.auctionType,
+                baseEnglishAuctionParams.startingPrice,
+                baseEnglishAuctionParams.reservePrice,
+                baseEnglishAuctionParams.duration,
+                baseEnglishAuctionParams.nftContract,
+                tokenId,
+                baseEnglishAuctionParams.priceDecrement,
+                baseEnglishAuctionParams.decrementInterval
             );
             const receipt = await tx.wait();
 
@@ -543,9 +581,12 @@ async function main() {
             let auctionId;
             for (const log of receipt.logs) {
                 try {
-                    const parsedLog = auctionManager.interface.parseLog(log);
+                    const parsedLog = auctionManager.interface.parseLog({
+                        topics: log.topics,
+                        data: log.data
+                    });
                     if (parsedLog?.name === 'AuctionStarted') {
-                        auctionId = parsedLog.args[0];
+                        auctionId = parsedLog.args.auctionId;
                         console.log(`Auction created with ID: ${auctionId}`);
                         englishAuctionIds.push(auctionId);
                         break;
@@ -559,18 +600,20 @@ async function main() {
         // Perform bidding on each auction
         console.log("\n=== Bidding on English Auctions ===");
 
-        const englishAuctionDepositAmount = ethers.parseEther("0.01"); // 0.01 token deposit
-
         for(let i = 0; i < englishAuctionIds.length; i++) {
             const auctionId = englishAuctionIds[i];
             console.log(`\nBidding on Auction #${i + 1} (ID: ${auctionId})`);
 
+            // Calculate deposit amount
+            const auction = await auctionManager.auctions(auctionId);
+            const depositAmount = auction.depositAmount;
+
             // First bid by addr2
-            const bidAmount1 = ethers.parseEther("0.06");
+            const bidAmount1 = ethers.parseEther("60");
             console.log("\nFirst bid by addr2:", ethers.formatEther(bidAmount1), "tokens");
             
             // Approve and deposit
-            await daToken.connect(addr2).approve(auctionManagerAddress, englishAuctionDepositAmount);
+            await daToken.connect(addr2).approve(auctionManagerAddress, depositAmount);
             await auctionManager.connect(addr2).deposit(auctionId);
             
             // Place bid
@@ -579,11 +622,11 @@ async function main() {
             await tx.wait();
 
             // Second bid by owner
-            const bidAmount2 = ethers.parseEther("0.07");
+            const bidAmount2 = ethers.parseEther("70");
             console.log("\nSecond bid by owner:", ethers.formatEther(bidAmount2), "tokens");
             
             // Approve and deposit
-            await daToken.connect(owner).approve(auctionManagerAddress, englishAuctionDepositAmount);
+            await daToken.connect(owner).approve(auctionManagerAddress, depositAmount);
             await auctionManager.connect(owner).deposit(auctionId);
             
             // Place bid

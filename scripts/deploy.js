@@ -45,6 +45,30 @@ async function main() {
         addresses.DANFT = await daNFT.getAddress();
         console.log("DANFT 已部署到:", addresses.DANFT);
 
+        // 部署 MockV3Aggregator (用于测试环境)
+        console.log("正在部署 MockV3Aggregator...");
+        const MockV3Aggregator = await hre.ethers.getContractFactory("MockV3Aggregator");
+        const mockV3Aggregator = await MockV3Aggregator.deploy(
+            8, // decimals
+            200000000000 // 2000 USD with 8 decimals
+        );
+        await mockV3Aggregator.waitForDeployment();
+        addresses.MockV3Aggregator = await mockV3Aggregator.getAddress();
+        console.log("MockV3Aggregator 已部署到:", addresses.MockV3Aggregator);
+
+        // 部署 TokenSwap
+        console.log("正在部署 TokenSwap...");
+        const TokenSwap = await hre.ethers.getContractFactory("TokenSwap");
+        const tokenSwap = await TokenSwap.deploy(
+            await daToken.getAddress(),
+            await mockV3Aggregator.getAddress(),
+            100, // 初始 DAToken 价格 (1 USD)
+            100  // 1% 滑点容忍度
+        );
+        await tokenSwap.waitForDeployment();
+        addresses.TokenSwap = await tokenSwap.getAddress();
+        console.log("TokenSwap 已部署到:", addresses.TokenSwap);
+
         // 部署 AuctionManager
         console.log("正在部署 AuctionManager...");
         const AuctionManager = await hre.ethers.getContractFactory("AuctionManager");
@@ -66,8 +90,13 @@ async function main() {
         const tokenBalance = await daToken.balanceOf(deployer.address);
         console.log("部署者 DAToken 余额:", tokenBalance.toString());
 
-        const auctionManagerToken = await auctionManager.myERC20Token();
-        console.log("AuctionManager 中的 token 地址:", auctionManagerToken);
+        const daTokenAddress = await auctionManager.daToken();
+        console.log("AuctionManager 中的 token 地址:", daTokenAddress);
+
+        // 为 TokenSwap 合约转入一些初始 DAToken
+        const swapInitialBalance = "1000000000000000000000000"; // 1,000,000 DAToken
+        await daToken.transfer(await tokenSwap.getAddress(), swapInitialBalance);
+        console.log("已向 TokenSwap 转入初始 DAToken");
 
         // 保存地址
         saveDeployedAddresses(addresses);

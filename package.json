@@ -1,13 +1,12 @@
 {
   "name": "auction-contract",
-  "type": "module",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "start": "npx hardhat node",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:erc20": "npx hardhat test test/MyERC20.test.js",
-    "test:nft": "npx hardhat test test/MyNFT.test.js",
+    "test:nft": "npx hardhat test test/DANFT.test.js",
     "test:auction": "npx hardhat test test/AuctionManager.test.js",
     "test:swap": "npx hardhat test test/TokenSwap.test.js",
     "op:erc20": "npx hardhat run scripts/token-operations.js --network localhost",
@@ -19,7 +18,9 @@
     "auction:info": "npx hardhat run scripts/show-info.ts --network localhost",
     "auction:events": "npx hardhat run scripts/query-auction-events.ts --network localhost",
     "upload-nfts": "node scripts/upload-nfts.js",
-    "list-files": "ts-node-esm scripts/list-files.ts"
+    "list-files": "ts-node-esm scripts/list-files.ts",
+    "op1": "npx hardhat run scripts/auction-op1.js --network localhost",
+    "mint-nfts": "npx hardhat run scripts/mint-nfts.js --network localhost"
   },
   "author": "",
   "license": "ISC",

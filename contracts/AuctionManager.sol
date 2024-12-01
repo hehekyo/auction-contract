@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 
 contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradeable, OwnableUpgradeable {
 
@@ -18,10 +19,12 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         IERC20 _daToken
     ) public initializer {
         __AccessControl_init();
+        __Ownable_init(initialAdmin);
         _setRoleAdmin(ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(ADMIN_ROLE, initialAdmin);
         daToken = _daToken;
+        feeRate = 500;
     }
 
     // 定义拍卖类型
@@ -51,6 +54,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         // NFT 信息
         address nftContract;
         uint tokenId;
+        string tokenURI;
         
         // 时间相关
         uint startTime;
@@ -100,8 +104,9 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     event AuctionStarted(
         uint256 indexed auctionId,
         address indexed seller,
-        address nftContract,
+        address indexed nftContract,
         uint256 tokenId,
+        string tokenURI,
         AuctionType auctionType,
         uint256 startingPrice,
         uint256 reservePrice,
@@ -238,6 +243,10 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             newAuction.lastUpdateTime = block.timestamp;
         }
 
+        // 获取 NFT 的 tokenURI
+        string memory tokenURI = IERC721Metadata(nftContract).tokenURI(tokenId);
+        newAuction.tokenURI = tokenURI;    // 存储 tokenURI
+
         // 转移 NFT 到合约
         IERC721(nftContract).transferFrom(msg.sender, address(this), tokenId);
 
@@ -246,6 +255,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             msg.sender,
             nftContract,
             tokenId,
+            tokenURI,
             auctionType,
             startingPrice,
             reservePrice,
@@ -424,7 +434,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
                     block.timestamp    // 使用当前时间戳
                 );
             } else {
-                // 有人购买��完成拍卖
+                // 有人购买完成拍卖
                 _completeAuction(auctionId);
             }
         }
@@ -625,7 +635,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     //     }
     // }
 
-    // 内部函数：完成拍卖
+    // ��部函数：完��拍卖
     function _completeAuction(uint auctionId) internal {
         Auction storage auction = auctions[auctionId];
         require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction not ongoing");
@@ -737,7 +747,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
 
     // 手续费相关
-    uint public feeRate = 500;  // 基点制：500 = 5%
+    uint public feeRate; // 移除初始值
     uint public constant MAX_FEE_RATE = 2000; // 最大 20%
 
     event FeeRateUpdated(uint oldFeeRate, uint newFeeRate);
