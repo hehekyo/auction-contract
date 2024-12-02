@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 
-contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradeable, OwnableUpgradeable {
+contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradeable, OwnableUpgradeable, KeeperCompatibleInterface {
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
@@ -84,7 +84,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     }
 
     // 存储拍卖
-    mapping(uint => Auction) public auctions; // 存储英式拍卖
+    mapping(uint => Auction) public auctions; // 存储拍卖
 
     uint public auctionCount;  // 当前拍卖的总数
 
@@ -582,58 +582,65 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
 
-    // function checkUpkeep(bytes calldata /* checkData */) external override returns (bool upkeepNeeded, bytes memory /* performData */) {
-    //     delete auctions2End;
-    //     delete dutchAuctions2UpdatePrice;
+    function checkEnglishAuction(uint i) private returns (bool) {
+        Auction storage auction = auctions[i];
+        if (auction.auctionStatus == AuctionStatus.Ongoing &&
+            auction.auctionType == AuctionType.EnglishAuction &&
+            auction.endTime <= block.timestamp) {
+            auctions2End.push(i);
+            return true;
+        }
+        return false;
+    }
 
-    //     upkeepNeeded = false;
+    function checkDutchAuction(uint i) private returns (bool) {
+        Auction storage auction = auctions[i];
+        if (auction.auctionStatus == AuctionStatus.Ongoing &&
+            auction.auctionType == AuctionType.DutchAuction) {
+            if (auction.winner != address(0)) {
+                auctions2End.push(i);
+                return true;
+            } else if (block.timestamp >= auction.lastUpdateTime + auction.decrementInterval &&
+                    auction.currentPrice > auction.finalPrice) {
+                dutchAuctions2UpdatePrice.push(i);
+                return true;
+            }
+        }
+        return false;
+    }
 
-    //     for (uint i = 1; i <= auctionCount; i++) {
-    //         Auction storage auction = auctions[i];
+    function checkUpkeep(bytes calldata /* checkData */) external override returns (bool upkeepNeeded, bytes memory /* performData */) {
+         delete auctions2End;
+         delete dutchAuctions2UpdatePrice;
 
-    //         if (auction.auctionStatus == AuctionStatus.Ongoing) {
-    //             // 英式拍卖到达结束时间
-    //             if (auction.auctionType == AuctionType.EnglishAuction &&
-    //                 auction.englishAuction.auctionEndTime <= block.timestamp) {
-    //                 upkeepNeeded = true;
-    //                 auctions2End.push(i);  // 将需要结束的拍加入列表
-    //             }
+         upkeepNeeded = false;
 
-    //             // 荷兰拍卖需要更新价格，且未结束且有出价者
-    //             if (auction.auctionType == AuctionType.DutchAuction) {
-    //                 // 检查是否有最高出价者，若有，则认为拍卖结束
-    //                 if (auction.winner != address(0)) {
-    //                     upkeepNeeded = true;
-    //                     auctions2End.push(i);  // 如果有出价者，结束拍卖
-    //                 }
-    //                 // 如果拍卖未结束且价格可以更新，执行价格递减
-    //                 else if (block.timestamp >= auction.dutchAuction.lastUpdateTime + auction.dutchAuction.decrementInterval &&
-    //                     auction.dutchAuction.currentPrice > auction.dutchAuction.endPrice) {
-    //                     upkeepNeeded = true;
-    //                     dutchAuctions2UpdatePrice.push(i);  // 将需要更新价格的拍卖加入列表
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+         for (uint i = 1; i <= auctionCount; i++) {
+            if (checkEnglishAuction(i) || checkDutchAuction(i)) {
+                upkeepNeeded = true;
+            }
+        }
+     }
 
-    // function performUpkeep(bytes calldata /* performData */) external override {
-    //     // 结束所有符合条件的英式拍卖或荷兰拍卖（有出价者）
-    //     for (uint i = 0; i < auctions2End.length; i++) {
-    //         uint auctionId = auctions2End[i];
-    //         endAuction(auctionId);  // 调用 endAuction 结束拍卖
-    //     }
+    function performUpkeep(bytes calldata /* performData */) external override {
+        // 结束所有符合条件的英式拍卖或荷兰拍卖（有出价者）
+        for (uint i = 0; i < auctions2End.length; i++) {
+            uint auctionId = auctions2End[i];
+            endAuction(auctionId);  // 调用 endAuction 结束拍卖
+        }
 
-    //     // 更新所有符合条的荷兰拍卖价格
-    //     for (uint i = 0; i < dutchAuctions2UpdatePrice.length; i++) {
-    //         uint auctionId = dutchAuctions2UpdatePrice[i];
-    //         Auction storage auction = auctions[auctionId];
+        // 更新所有符合条的荷兰拍卖价格
+        for (uint i = 0; i < dutchAuctions2UpdatePrice.length; i++) {
+            uint auctionId = dutchAuctions2UpdatePrice[i];
+            {
+                Auction storage auction = auctions[auctionId];
 
-    //         // 降价
-    //         auction.dutchAuction.currentPrice -= auction.dutchAuction.priceDecrement;
-    //         auction.dutchAuction.lastUpdateTime = block.timestamp;  // 更新最后更新时间
-    //     }
-    // }
+                // 降价
+                auction.currentPrice -= auction.priceDecrement;
+                auction.lastUpdateTime = block.timestamp;  // 更新最后更新时间
+            }
+        }
+    }
 
     // ��部函数：完��拍卖
     function _completeAuction(uint auctionId) internal {
