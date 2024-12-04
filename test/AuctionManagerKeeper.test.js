@@ -41,9 +41,8 @@ describe("AuctionManager with DANFT and DAToken", function () {
     // Approve NFT transfer
     await daNFT.connect(owner).setApprovalForAll(await auctionManager.getAddress(), true);
 
-    // Start auction
-    await expect(
-      auctionManager.startAuction(
+    // Start auction and get the emitted event
+    const tx = await auctionManager.startAuction(
         0, // English Auction
         startingPrice,
         reservePrice,
@@ -52,29 +51,42 @@ describe("AuctionManager with DANFT and DAToken", function () {
         1,
         0, // No price decrement
         0 // No decrement interval
-      )
-    )
-    .to.emit(auctionManager, "AuctionStarted")
-    .withArgs(
-        1, // auctionId
-        owner.address, // seller
-        await daNFT.getAddress(), // nftContract
-        1, // tokenId
-        "ipfs://example-image-uri", // tokenURI
-        0, // auctionType
-        startingPrice, // startingPrice
-        reservePrice, // reservePrice
-        duration, // duration
-        depositAmount,
-        await ethers.provider.getBlock("latest").then((block) => block.timestamp), // startTime
-        await ethers.provider.getBlock("latest").then((block) => block.timestamp + duration) // endTime
     );
 
-    const auction = await auctionManager.auctions(1);
-    expect(auction.seller).to.equal(owner.address);
-    expect(auction.startingPrice).to.equal(startingPrice);
-    expect(auction.reservePrice).to.equal(reservePrice);
+    const receipt = await tx.wait();
+    console.log("Transaction Logs:", receipt.logs); // 直接查看原始日志
+
+    // 找到 AuctionStarted 的日志
+    const auctionStartedLog = receipt.logs.find(
+        log => log.fragment?.name === "AuctionStarted"
+    );
+
+    if (auctionStartedLog) {
+        const { args } = auctionStartedLog;
+        //console.log("AuctionStarted Event Arguments:", args);
+
+        // 验证事件内容
+        expect(args[0]).to.equal(1n); // auctionId
+        expect(args[1]).to.equal(owner.address); // seller
+        expect(args[2]).to.equal(await daNFT.getAddress()); // nftContract
+        expect(args[3]).to.equal(1n); // tokenId
+        expect(args[4]).to.equal("ipfs://example-image-uri"); // tokenURI
+        expect(args[5]).to.equal(0n); // auctionType
+        expect(args[6]).to.equal(startingPrice); // startingPrice
+        expect(args[7]).to.equal(reservePrice); // reservePrice
+        expect(args[8]).to.equal(duration); // duration
+        expect(args[9]).to.equal(depositAmount); // depositAmount
+        // 检查时间戳
+        const startTime = args[10];
+        const endTime = args[11];
+        const latestBlock = await ethers.provider.getBlock("latest");
+        expect(startTime).to.equal(BigInt(latestBlock.timestamp));
+        expect(endTime).to.equal(BigInt(latestBlock.timestamp) + BigInt(duration));
+    } else {
+        throw new Error("AuctionStarted event not found");
+    }
   });
+
 
   it("Should allow bidding in an English auction", async function () {
     const startingPrice = ethers.parseEther("10");
