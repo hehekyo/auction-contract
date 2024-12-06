@@ -16,15 +16,17 @@ contract SwapRouter {
     using SafeMath for uint;
     address public immutable factory;
     address public immutable WETH;
+    address public immutable DA;
 
     modifier ensure(uint deadline) {
         require(deadline >= block.timestamp, 'DAuctionSwapRouter: EXPIRED');
         _;
     }
 
-    constructor(address _factory, address _WETH) {
+    constructor(address _factory, address _WETH, address _DA) {
         factory = _factory;
         WETH = _WETH;
+        DA = _DA;
     }
 
     receive() external payable {
@@ -197,6 +199,34 @@ contract SwapRouter {
         }
     }
 
+    // Buy Tokens with ETH
+    function buyTokens() external payable ensure(block.timestamp) returns (uint256 amount){
+        address[] memory path;
+        path[0] = WETH;
+        path[1] = address(DA); // Replace DA with your actual token address
+        uint[] memory amounts = SwapLibrary.getAmountsOut(factory, msg.value, path);
+        amount = amounts[0];
+        
+        IWETH(WETH).deposit{value: amount}();
+        assert(IWETH(WETH).transfer(SwapLibrary.pairFor(factory, path[0], path[1]), amount));
+        _swap(amounts, path, msg.sender);
+    }
+
+    // Sell Tokens for ETH
+    function sellTokens(uint256 tokenAmount) external ensure(block.timestamp) {
+        address[] memory path;
+        path[0] = address(DA); // Replace DA with your actual token address
+        path[1] = WETH;
+        uint[] memory amounts = SwapLibrary.getAmountsOut(factory, tokenAmount, path);
+        TransferHelper.safeTransferFrom(
+            path[0], msg.sender, SwapLibrary.pairFor(factory, path[0], path[1]), amounts[0]
+        );
+        _swap(amounts, path, address(this));
+        IWETH(WETH).withdraw(amounts[amounts.length - 1]);
+        TransferHelper.safeTransferETH(msg.sender, amounts[amounts.length - 1]);
+    }
+
+    /*
     function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline)
         external
         virtual
@@ -230,7 +260,7 @@ contract SwapRouter {
         TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
     }
     function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
-        external
+        external 
         virtual
         
         ensure(deadline)
@@ -331,6 +361,7 @@ contract SwapRouter {
         IWETH(WETH).withdraw(amountOut);
         TransferHelper.safeTransferETH(to, amountOut);
     }
+    */
 
     // **** LIBRARY FUNCTIONS ****
     function quote(uint amountA, uint reserveA, uint reserveB) public pure virtual  returns (uint amountB) {
