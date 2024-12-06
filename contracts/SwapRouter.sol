@@ -8,10 +8,11 @@ import './interfaces/ISwapPair.sol';
 import './libraries/TransferHelper.sol';
 import './libraries/SwapLibrary.sol';
 import './libraries/SafeMath.sol';
+import './interfaces/ISwapRouter.sol';
 
 
 
-contract SwapRouter {
+contract SwapRouter is ISwapRouter{
 
     using SafeMath for uint;
     address public immutable factory;
@@ -71,7 +72,7 @@ contract SwapRouter {
         uint amountETHMin,
         address to,
         uint deadline
-    ) external virtual  payable ensure(deadline) returns (uint amountToken, uint amountETH, uint liquidity) {
+    ) external virtual override payable ensure(deadline) returns (uint amountToken, uint amountETH, uint liquidity) {
         (amountToken, amountETH) = _addLiquidity(
             token,
             WETH,
@@ -98,7 +99,7 @@ contract SwapRouter {
         uint amountBMin,
         address to,
         uint deadline
-    ) public virtual  ensure(deadline) returns (uint amountA, uint amountB) {
+    ) public virtual override ensure(deadline) returns (uint amountA, uint amountB) {
         address pair = SwapLibrary.pairFor(factory, tokenA, tokenB);
         ISwapPair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
         (uint amount0, uint amount1) = ISwapPair(pair).burn(to);
@@ -115,7 +116,7 @@ contract SwapRouter {
         uint amountETHMin,
         address to,
         uint deadline
-    ) public virtual  ensure(deadline) returns (uint amountToken, uint amountETH) {
+    ) public virtual override ensure(deadline) returns (uint amountToken, uint amountETH) {
         (amountToken, amountETH) = removeLiquidity(
             token,
             WETH,
@@ -138,7 +139,7 @@ contract SwapRouter {
         address to,
         uint deadline,
         bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external virtual  returns (uint amountToken, uint amountETH) {
+    ) external virtual override returns (uint amountToken, uint amountETH) {
         address pair = SwapLibrary.pairFor(factory, token, WETH);
         uint value = approveMax ? type(uint).max : liquidity;
         ISwapPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
@@ -153,7 +154,7 @@ contract SwapRouter {
         uint amountETHMin,
         address to,
         uint deadline
-    ) public virtual  ensure(deadline) returns (uint amountETH) {
+    ) public virtual override ensure(deadline) returns (uint amountETH) {
         (, amountETH) = removeLiquidity(
             token,
             WETH,
@@ -175,7 +176,7 @@ contract SwapRouter {
         address to,
         uint deadline,
         bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external virtual  returns (uint amountETH) {
+    ) external virtual override returns (uint amountETH) {
         address pair = SwapLibrary.pairFor(factory, token, WETH);
         uint value = approveMax ? type(uint).max : liquidity;
         ISwapPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
@@ -200,15 +201,14 @@ contract SwapRouter {
     }
 
     // Buy Tokens with ETH
-    function buyTokens() external payable ensure(block.timestamp) returns (uint256 amount){
+    function buyTokens() external override payable ensure(block.timestamp) {
         address[] memory path;
         path[0] = WETH;
         path[1] = address(DA); // Replace DA with your actual token address
         uint[] memory amounts = SwapLibrary.getAmountsOut(factory, msg.value, path);
-        amount = amounts[0];
         
-        IWETH(WETH).deposit{value: amount}();
-        assert(IWETH(WETH).transfer(SwapLibrary.pairFor(factory, path[0], path[1]), amount));
+        IWETH(WETH).deposit{value: amounts[0]}();
+        assert(IWETH(WETH).transfer(SwapLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
         _swap(amounts, path, msg.sender);
     }
 
@@ -372,7 +372,7 @@ contract SwapRouter {
         public
         pure
         virtual
-        
+        override 
         returns (uint amountOut)
     {
         return SwapLibrary.getAmountOut(amountIn, reserveIn, reserveOut);
@@ -392,7 +392,7 @@ contract SwapRouter {
         public
         view
         virtual
-        
+        override
         returns (uint[] memory amounts)
     {
         return SwapLibrary.getAmountsOut(factory, amountIn, path);
@@ -402,7 +402,7 @@ contract SwapRouter {
         public
         view
         virtual
-        
+        override
         returns (uint[] memory amounts)
     {
         return SwapLibrary.getAmountsIn(factory, amountOut, path);
