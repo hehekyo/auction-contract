@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+import "hardhat/console.sol";
 
 contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradeable, OwnableUpgradeable, KeeperCompatibleInterface {
 
@@ -317,7 +318,8 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             // 检查用户是否有足够的代币余额
             require(daToken.balanceOf(msg.sender) >= amount, "Insufficient token balance");
             // 检查用户是否已经授权合约使用足够的代币
-            require(daToken.allowance(msg.sender, address(this)) >= amount, "Insufficient token allowance");
+            require(daToken.allowance(msg.sender, address(this)) >= amount, "Insufficient token allowance: english");
+
 
             // 更新拍卖状态
             if (auction.winner != address(0)) {
@@ -595,6 +597,10 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     function checkDutchAuction(uint i) private returns (bool) {
         Auction storage auction = auctions[i];
+        console.log(block.timestamp);
+        console.log(auction.lastUpdateTime + auction.decrementInterval);
+        console.log(auction.currentPrice);
+        console.log(auction.finalPrice);
         if (auction.auctionStatus == AuctionStatus.Ongoing &&
             auction.auctionType == AuctionType.DutchAuction) {
             if (auction.winner != address(0)) {
@@ -609,6 +615,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
         return false;
     }
 
+    event CheckUpkeepResult(bool upkeepNeeded, uint timestamp);
     function checkUpkeep(bytes calldata /* checkData */) external override returns (bool upkeepNeeded, bytes memory /* performData */) {
          delete auctions2End;
          delete dutchAuctions2UpdatePrice;
@@ -620,6 +627,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
                 upkeepNeeded = true;
             }
         }
+        emit CheckUpkeepResult(upkeepNeeded, block.timestamp);
      }
 
     function performUpkeep(bytes calldata /* performData */) external override {
@@ -634,10 +642,11 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
             uint auctionId = dutchAuctions2UpdatePrice[i];
             {
                 Auction storage auction = auctions[auctionId];
-
+                uint256 oldPrice = auction.currentPrice;
                 // 降价
                 auction.currentPrice -= auction.priceDecrement;
                 auction.lastUpdateTime = block.timestamp;  // 更新最后更新时间
+                emit DutchAuctionPriceUpdated(i, oldPrice, auction.currentPrice, auction.lastUpdateTime);
             }
         }
     }

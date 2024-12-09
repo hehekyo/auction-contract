@@ -54,7 +54,7 @@ describe("AuctionManager with DANFT and DAToken", function () {
     );
 
     const receipt = await tx.wait();
-    console.log("Transaction Logs:", receipt.logs); // 直接查看原始日志
+    //console.log("Transaction Logs:", receipt.logs); // 直接查看原始日志
 
     // 找到 AuctionStarted 的日志
     const auctionStartedLog = receipt.logs.find(
@@ -109,15 +109,20 @@ describe("AuctionManager with DANFT and DAToken", function () {
     );
 
     // Approve and deposit DA Token
-    await daToken.connect(user1).approve(await auctionManager.getAddress(), startingPrice);
+    await daToken.connect(owner).mint(user1, ethers.parseEther("10000000"));
+    await daToken.connect(user1).approve(await auctionManager.getAddress(), ethers.parseEther("11") );
     await auctionManager.connect(user1).deposit(1);
 
+    console.log("balance(user1)" + await daToken.balanceOf(user1));
+    console.log("allowance(user1)" + await daToken.allowance(user1, await auctionManager.getAddress()));
+    const latestBlock = await ethers.provider.getBlock("latest");
     // Place a bid
     await expect(auctionManager.connect(user1).bid(1, startingPrice))
       .to.emit(auctionManager, "BidPlaced")
-      .withArgs(1, user1.address, startingPrice);
+      .withArgs(1, user1.address, startingPrice, latestBlock.timestamp + 1);
 
     const auction = await auctionManager.auctions(1);
+    
     expect(auction.winner).to.equal(user1.address);
     expect(auction.currentBid).to.equal(startingPrice);
   });
@@ -148,15 +153,27 @@ describe("AuctionManager with DANFT and DAToken", function () {
     await ethers.provider.send("evm_increaseTime", [decrementInterval]);
     await ethers.provider.send("evm_mine");
 
+    const AbiCoder = new ethers.AbiCoder()
     // Trigger upkeep
-    const checkData = ethers.defaultAbiCoder.encode([], []);
-    const { upkeepNeeded } = await auctionManager.checkUpkeep(checkData);
+    const checkData = AbiCoder.encode([], []);
+    const tx = await auctionManager.checkUpkeep(checkData);
+    const receipt = await tx.wait();
+    //console.log("receipt log: ", receipt.logs);
+    var upkeepNeeded;
+    receipt.logs.forEach((log) => {
+        if (log.fragment && log.fragment.name === "CheckUpkeepResult") {
+            upkeepNeeded = log.args[0]; // 获取第一个参数
+            console.log("CheckUpkeepResult - First argument (upkeepNeeded):", upkeepNeeded);
+        }
+    });
+
     expect(upkeepNeeded).to.be.true;
 
-    await expect(auctionManager.performUpkeep([]))
+    const performData = AbiCoder.encode([], []);
+    await expect(auctionManager.performUpkeep(performData))
       .to.emit(auctionManager, "DutchAuctionPriceUpdated");
 
     const auction = await auctionManager.auctions(1);
-    expect(auction.currentPrice).to.equal(startingPrice.sub(priceDecrement));
+    expect(auction.currentPrice).to.equal(startingPrice - priceDecrement);
   });
 });
