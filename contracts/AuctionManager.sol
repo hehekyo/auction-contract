@@ -387,7 +387,7 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
     // 结束拍卖
     function endAuction(uint auctionId) public {
         Auction storage auction = auctions[auctionId];
-        require(auction.endTime <= block.timestamp, "Auction not ended");
+        require(auction.endTime <= block.timestamp, "Auction not ended"); // TODO 荷兰拍也要到时间吗？还是出价完了就好了
         require(auction.auctionStatus == AuctionStatus.Ongoing, "Auction not ongoing");
 
         if (auction.auctionType == AuctionType.EnglishAuction) {
@@ -586,6 +586,10 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     function checkEnglishAuction(uint i) private returns (bool) {
         Auction storage auction = auctions[i];
+        //console.log("Check English ...");
+        //console.log(auction.endTime);
+        //console.log(block.timestamp);
+        //console.log(auction.finalPrice);
         if (auction.auctionStatus == AuctionStatus.Ongoing &&
             auction.auctionType == AuctionType.EnglishAuction &&
             auction.endTime <= block.timestamp) {
@@ -597,10 +601,12 @@ contract AuctionManager is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     function checkDutchAuction(uint i) private returns (bool) {
         Auction storage auction = auctions[i];
-        console.log(block.timestamp);
-        console.log(auction.lastUpdateTime + auction.decrementInterval);
-        console.log(auction.currentPrice);
-        console.log(auction.finalPrice);
+        //console.log("Check Dutch ...");
+        //console.log(block.timestamp);
+        //console.log(auction.lastUpdateTime + auction.decrementInterval);
+        //console.log(auction.currentPrice);
+        //console.log(auction.finalPrice);
+        //console.log(auction.winner);
         if (auction.auctionStatus == AuctionStatus.Ongoing &&
             auction.auctionType == AuctionType.DutchAuction) {
             if (auction.winner != address(0)) {
