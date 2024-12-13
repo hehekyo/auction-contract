@@ -1,6 +1,7 @@
-import hre from "hardhat";
-import * as fs from 'fs';
-import * as path from 'path';
+const hre = require("hardhat");
+const fs = require('fs');
+const path = require('path');
+
 
 const ADDRESS_FILE = path.join(__dirname, '../deployed-addresses.json');
 const TARGET_ADDRESS = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
@@ -25,11 +26,11 @@ async function main() {
     const addresses = await getDeployedAddresses();
     
     // 获取合约实例
-    const myToken = await hre.ethers.getContractAt("MyERC20", addresses.MyToken);
-    const myNFT = await hre.ethers.getContractAt("MyNFT", addresses.MyNFT);
+    const myToken = await hre.ethers.getContractAt("DAToken", addresses.DAToken);
+    const myNFT = await hre.ethers.getContractAt("DANFT", addresses.DANFT);
 
     console.log("\n=== ERC20代币信息 ===");
-    console.log("代币合约地址:", addresses.MyToken);
+    console.log("代币合约地址:", addresses.DAToken);
     console.log("代币名称:", await myToken.name());
     console.log("代币符号:", await myToken.symbol());
     const totalSupply = await myToken.totalSupply();
@@ -44,7 +45,7 @@ async function main() {
     console.log(`目标地址 ${TARGET_ADDRESS} 代币余额:`, ethers.formatEther(targetBalance));
 
     console.log("\n=== NFT信息 ===");
-    console.log("NFT合约地址:", addresses.MyNFT);
+    console.log("NFT合约地址:", addresses.DANFT);
     console.log("NFT名称:", await myNFT.name());
     console.log("NFT符号:", await myNFT.symbol());
     try {

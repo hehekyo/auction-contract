@@ -10,6 +10,9 @@ async function main() {
         "ipfs://QmPXS7r8HaThYJRPH2oaB1WY3i4xNGUSaxQzSAbFairfTn"
     ];
 
+    // 指定的 NFT 所有者地址
+    const specifiedOwner = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+
     // 获取部署账户
     const [deployer] = await ethers.getSigners();
     console.log("使用账户:", deployer.address);
@@ -28,7 +31,7 @@ async function main() {
     for (let i = 0; i < nftURIs.length; i++) {
         console.log(`\n铸造 NFT ${i}...`);
         try {
-            const tx = await danft.mint(nftURIs[i]);
+            const tx = await danft.mint(specifiedOwner, i, nftURIs[i]); // 使用指定的所有者地址
             const receipt = await tx.wait();
             
             // 获取事件

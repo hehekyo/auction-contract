@@ -14,17 +14,17 @@ function getDeployedAddresses() {
 async function mintAndTransferTokens(myToken, myNFT, recipientAddress) {
     console.log("开始铸造代币和NFT...");
     
-    // 直接铸造100个代币到指定地址
-    const tokenAmount = hre.ethers.parseEther("100");
+    // 直接铸造100000个代币到指定地址
+    const tokenAmount = hre.ethers.parseEther("100000");
     await myToken.mint(recipientAddress, tokenAmount);
-    console.log(`已铸造 100 个代币到地址: ${recipientAddress}`);
+    console.log(`已铸造 100000 个代币到地址: ${recipientAddress}`);
 
     // 铸造10个NFT到指定地址
-    for (let i = 0; i < 10; i++) {
-        const imageURI = `https://example.com/nft/${i}`; // 示例URI，请根据实际需求修改
-        await myNFT.mint(recipientAddress, i, imageURI);
-        console.log(`已铸造 NFT #${i} 到地址: ${recipientAddress}`);
-    }
+    // for (let i = 0; i < 10; i++) {
+    //     const imageURI = `https://example.com/nft/${i}`; // 示例URI，请根据实际需求修改
+    //     await myNFT.mint(recipientAddress, i, imageURI);
+    //     console.log(`已铸造 NFT #${i} 到地址: ${recipientAddress}`);
+    // }
 }
 
 async function main() {
@@ -38,11 +38,11 @@ async function main() {
         const addresses = getDeployedAddresses();
         
         // 获取合约实例
-        const MyToken = await hre.ethers.getContractFactory("MyERC20");
-        const myToken = MyToken.attach(addresses.MyToken);
+        const MyToken = await hre.ethers.getContractFactory("DAToken");
+        const myToken = MyToken.attach(addresses.DAToken);
         
-        const MyNFT = await hre.ethers.getContractFactory("MyNFT");
-        const myNFT = MyNFT.attach(addresses.MyNFT);
+        const MyNFT = await hre.ethers.getContractFactory("DANFT");
+        const myNFT = MyNFT.attach(addresses.DANFT);
 
         // 执行铸造和转账
         await mintAndTransferTokens(myToken, myNFT, RECIPIENT_ADDRESS);

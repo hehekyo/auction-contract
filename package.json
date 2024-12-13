@@ -15,12 +15,13 @@
     "test:utils": "mocha utils/**/*.test.js",
     "deploy": "npx hardhat run scripts/deploy.js --network localhost",
     "transfer": "npx hardhat run scripts/transfer-dev.js --network localhost",
-    "auction:info": "npx hardhat run scripts/show-info.ts --network localhost",
+    "auction:info": "npx hardhat run scripts/show-info.js --network localhost",
     "auction:events": "npx hardhat run scripts/query-auction-events.ts --network localhost",
     "upload-nfts": "node scripts/upload-nfts.js",
     "list-files": "ts-node-esm scripts/list-files.ts",
     "op1": "npx hardhat run scripts/auction-op1.js --network localhost",
     "mint-nfts": "npx hardhat run scripts/mint-nfts.js --network localhost"
+
   },
   "author": "",
   "license": "ISC",
