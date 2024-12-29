@@ -5,13 +5,13 @@
   "scripts": {
     "start": "npx hardhat node",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:english": "npx hardhat test test/EnglishAuction.test.js",
     "test:erc20": "npx hardhat test test/MyERC20.test.js",
     "test:nft": "npx hardhat test test/DANFT.test.js",
     "test:auction": "npx hardhat test test/AuctionManager.test.js",
     "test:swap": "npx hardhat test test/TokenSwap.test.js",
     "op:erc20": "npx hardhat run scripts/token-operations.js --network localhost",
     "op:nft": "npx hardhat run scripts/nft-operations.js --network localhost",
-    "op": "npx hardhat run scripts/auction-operations.js --network localhost",
     "test:utils": "mocha utils/**/*.test.js",
     "deploy": "npx hardhat run scripts/deploy.js --network localhost",
     "transfer": "npx hardhat run scripts/transfer-dev.js --network localhost",
@@ -20,7 +20,10 @@
     "upload-nfts": "node scripts/upload-nfts.js",
     "list-files": "ts-node-esm scripts/list-files.ts",
     "op1": "npx hardhat run scripts/auction-op1.js --network localhost",
-    "mint-nfts": "npx hardhat run scripts/mint-nfts.js --network localhost"
+    "mint-nfts": "npx hardhat run scripts/mint-nfts.js --network localhost",
+    "deploy-new": "npx hardhat run scripts/deploy-new.js --network localhost",
+    "op-new": "npx hardhat run scripts/auction-op-new.js --network localhost"
+
 
   },
   "author": "",
