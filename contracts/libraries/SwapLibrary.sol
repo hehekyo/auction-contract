@@ -3,7 +3,7 @@ pragma solidity ^0.8.22;
 
 import '../interfaces/ISwapPair.sol';
 import "./SafeMath.sol";
-
+import "hardhat/console.sol";
 library SwapLibrary {
     using SafeMath for uint;
 
@@ -27,8 +27,12 @@ library SwapLibrary {
 
     // fetches and sorts the reserves for a pair
     function getReserves(address factory, address tokenA, address tokenB) internal view returns (uint reserveA, uint reserveB) {
+        console.log("===== SwapLibrary getReserves");
         (address token0,) = sortTokens(tokenA, tokenB);
+        console.log("===== token0", token0);
         (uint reserve0, uint reserve1,) = ISwapPair(pairFor(factory, tokenA, tokenB)).getReserves();
+        console.log("===== reserve0", reserve0);
+        console.log("===== reserve1", reserve1);
         (reserveA, reserveB) = tokenA == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
     }
 

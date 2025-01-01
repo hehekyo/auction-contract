@@ -11,17 +11,25 @@ describe("SwapRouter", function () {
     beforeEach(async function () {
         [owner, addr1, addr2] = await ethers.getSigners();
 
+        console.log("部署合约...");
+
         // 部署 WETH
         WETH = await ethers.getContractFactory("WETH");
         weth = await WETH.deploy();
+        await weth.waitForDeployment();
+        console.log("WETH deployed to:", await weth.getAddress());
 
         // 部署 DAToken
-        const DATokenFactory = await ethers.getContractFactory("DAToken");
-        daToken = await DATokenFactory.deploy(ethers.parseEther("1000000")); // 1,000,000 tokens
+        DAToken = await ethers.getContractFactory("DAToken");
+        daToken = await DAToken.deploy(ethers.parseEther("1000000")); // 1,000,000 tokens
+        await daToken.waitForDeployment();
+        console.log("DAToken deployed to:", await daToken.getAddress());
 
         // 部署工厂合约
         SwapFactory = await ethers.getContractFactory("SwapFactory");
         swapFactory = await SwapFactory.deploy();
+        await swapFactory.waitForDeployment();
+        console.log("SwapFactory deployed to:", await swapFactory.getAddress());
 
         // 部署路由合约
         SwapRouter = await ethers.getContractFactory("SwapRouter");
@@ -30,6 +38,8 @@ describe("SwapRouter", function () {
             await weth.getAddress(),
             await daToken.getAddress()
         );
+        await swapRouter.waitForDeployment();
+        console.log("SwapRouter deployed to:", await swapRouter.getAddress());
 
         // 设置 deadline（当前时间 + 20分钟）
         deadline = (await time.latest()) + 1200;
@@ -38,8 +48,21 @@ describe("SwapRouter", function () {
         await daToken.transfer(addr1.address, ethers.parseEther("10000"));
         await daToken.transfer(addr2.address, ethers.parseEther("10000"));
 
+        console.log("创建流动性池...");
         // 创建流动性池
-        await swapFactory.createPair(await daToken.getAddress(), await weth.getAddress());
+        const createPairTx = await swapFactory.createPair(
+            await daToken.getAddress(),
+            await weth.getAddress()
+        );
+        await createPairTx.wait();
+
+        // 验证流动性池是否创建成功
+        const pair = await swapFactory.getPair(
+            await daToken.getAddress(),
+            await weth.getAddress()
+        );
+        console.log("流动性池地址:", pair);
+        expect(pair).to.not.equal(ethers.ZeroAddress);
     });
 
     describe("添加流动性", function () {
@@ -49,12 +72,24 @@ describe("SwapRouter", function () {
             const minTokenAmount = ethers.parseEther("90");
             const minEthAmount = ethers.parseEther("0.9");
 
-            // 授权路由合约使用代币
-            await daToken.connect(owner).approve(swapRouter.getAddress(), tokenAmount);
+            // 检查初始状态
+            const initialTokenBalance = await daToken.balanceOf(owner.address);
+            const initialEthBalance = await ethers.provider.getBalance(owner.address);
+            
+            // 检查流动性池是否存在
+            const pair = await swapFactory.getPair(await daToken.getAddress(), await weth.getAddress());
+            expect(pair).to.not.equal(ethers.ZeroAddress);
 
-            // 添加流动性
-            await expect(
-                swapRouter.addLiquidityWithETH(
+            // 授权路由合约使用代币
+            await daToken.approve(await swapRouter.getAddress(), tokenAmount);
+            
+            // 验证授权
+            const allowance = await daToken.allowance(owner.address, await swapRouter.getAddress());
+            expect(allowance).to.equal(tokenAmount);
+
+            try {
+                // 添加流动性
+                const tx = await swapRouter.addLiquidityWithETH(
                     await daToken.getAddress(),
                     tokenAmount,
                     minTokenAmount,
@@ -62,15 +97,28 @@ describe("SwapRouter", function () {
                     owner.address,
                     deadline,
                     { value: ethAmount }
-                )
-            ).to.emit(swapRouter, "LiquidityAdded");
-
-            // 验证流动性池是否创建
-            const pair = await swapFactory.getPair(
-                await daToken.getAddress(),
-                await weth.getAddress()
-            );
-            expect(pair).to.not.equal(ethers.constants.AddressZero);
+                );
+                
+                // 等待交易确认
+                const receipt = await tx.wait();
+                
+                // 验证事件
+                const event = receipt.events?.find(e => e.event === 'LiquidityAdded');
+                expect(event).to.not.be.undefined;
+                
+                // 验证流动性代币余额
+                const pairContract = await ethers.getContractAt("ISwapPair", pair);
+                const liquidityBalance = await pairContract.balanceOf(owner.address);
+                expect(liquidityBalance).to.be.gt(0);
+                
+                // 验证代币转移
+                const finalTokenBalance = await daToken.balanceOf(owner.address);
+                expect(initialTokenBalance.sub(finalTokenBalance)).to.equal(tokenAmount);
+                
+            } catch (error) {
+                console.error("添加流动性失败:", error);
+                throw error;
+            }
         });
 
         it("不应该接受过期的 deadline", async function () {

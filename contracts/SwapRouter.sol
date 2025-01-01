@@ -10,6 +10,8 @@ import './libraries/SwapLibrary.sol';
 import './libraries/SafeMath.sol';
 import './interfaces/ISwapRouter.sol';
 
+import "hardhat/console.sol";
+
 
 
 contract SwapRouter is ISwapRouter{
@@ -45,15 +47,23 @@ contract SwapRouter is ISwapRouter{
         uint amountAMin,
         uint amountBMin
     ) internal virtual returns (uint amountA, uint amountB) {
+        console.log("=====_addLiquidity");
         // create the pair if it doesn't exist yet
         if (SwapFactory(factory).getPair(tokenA, tokenB) == address(0)) {
+            console.log("=====createPair");
             SwapFactory(factory).createPair(tokenA, tokenB);
         }
         //reserveA reserveB 是tokenA tokenB的储备量
         //amountADesired amountBDesired 是用户想要添加的tokenA tokenB的数量
+        console.log("=====getReserves");
         (uint reserveA, uint reserveB) = SwapLibrary.getReserves(factory, tokenA, tokenB);
+        console.log("=====reserveA", reserveA);
+        console.log("=====reserveB", reserveB);
+
         if (reserveA == 0 && reserveB == 0) {
             (amountA, amountB) = (amountADesired, amountBDesired);
+            console.log("=====amountA", amountA);
+            console.log("=====amountB", amountB);
         } else {
             //amountBOptimal 是根据amountADesired和reserveA reserveB计算出的最优的amountB
             uint amountBOptimal = SwapLibrary.quote(amountADesired, reserveA, reserveB);
@@ -97,6 +107,7 @@ contract SwapRouter is ISwapRouter{
         address to,
         uint deadline
     ) external virtual override payable ensure(deadline) returns (uint amountToken, uint amountETH, uint liquidity) {
+       console.log("=====addLiquidity");
         (amountToken, amountETH) = _addLiquidity(
             token,
             WETH,
@@ -109,8 +120,16 @@ contract SwapRouter is ISwapRouter{
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
         //将用户转入的 ETH 转成了 WETH
         IWETH(WETH).deposit{value: amountETH}();
+        console.log("=====amountETH", amountETH);
+        
+
         assert(IWETH(WETH).transfer(pair, amountETH));
+        console.log("transfer amountETH to pair",pair, amountETH);
+
         liquidity = ISwapPair(pair).mint(to);
+        console.log("mint liquidity",liquidity);
+        console.log("msg.value",msg.value);
+
         // refund dust eth, if any
         if (msg.value > amountETH) TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
     }
