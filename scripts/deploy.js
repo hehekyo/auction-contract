@@ -2,14 +2,14 @@ const hre = require("hardhat");
 const fs = require('fs');
 const path = require('path');
 
-const ADDRESS_FILE = path.join(__dirname, '../deployed-addresses.json');
+const ADDRESS_FILE = path.join(__dirname, '../auction-addresses.json');
 
 function saveDeployedAddresses(addresses) {
     fs.writeFileSync(
         ADDRESS_FILE,
         JSON.stringify(addresses, null, 2)
     );
-    console.log('部署地址已保存到:', ADDRESS_FILE);
+    console.log('拍卖合约地址已保存到:', ADDRESS_FILE);
 }
 
 function getDeployedAddresses() {
@@ -21,7 +21,7 @@ function getDeployedAddresses() {
 
 async function main() {
     const [deployer] = await hre.ethers.getSigners();
-    console.log("开始部署合约，部署账户:", deployer.address);
+    console.log("开始部署拍卖相关合约，部署账户:", deployer.address);
 
     try {
         const addresses = getDeployedAddresses();
@@ -29,10 +29,7 @@ async function main() {
         // 部署 DAToken
         console.log("正在部署 DAToken...");
         const DAToken = await hre.ethers.getContractFactory("DAToken");
-        const daToken = await DAToken.deploy(
-            deployer.address,
-            "1000000000000000000000000" // 1,000,000 tokens with 18 decimals
-        );
+        const daToken = await DAToken.deploy("100000000000000000000000"); // 100,000 tokens
         await daToken.waitForDeployment();
         addresses.DAToken = await daToken.getAddress();
         console.log("DAToken 已部署到:", addresses.DAToken);
@@ -45,62 +42,41 @@ async function main() {
         addresses.DANFT = await daNFT.getAddress();
         console.log("DANFT 已部署到:", addresses.DANFT);
 
-        // 部署 MockV3Aggregator (用于测试环境)
-        console.log("正在部署 MockV3Aggregator...");
-        const MockV3Aggregator = await hre.ethers.getContractFactory("MockV3Aggregator");
-        const mockV3Aggregator = await MockV3Aggregator.deploy(
-            8, // decimals
-            200000000000 // 2000 USD with 8 decimals
-        );
-        await mockV3Aggregator.waitForDeployment();
-        addresses.MockV3Aggregator = await mockV3Aggregator.getAddress();
-        console.log("MockV3Aggregator 已部署到:", addresses.MockV3Aggregator);
+        // 部署 EnglishAuction
+        console.log("正在部署 EnglishAuction...");
+        const EnglishAuction = await hre.ethers.getContractFactory("EnglishAuction");
+        const englishAuction = await EnglishAuction.deploy(daToken.getAddress());
+        await englishAuction.waitForDeployment();
+        addresses.EnglishAuction = await englishAuction.getAddress();
+        console.log("EnglishAuction 已部署到:", addresses.EnglishAuction);
 
-        // 部署 TokenSwap
-        console.log("正在部署 TokenSwap...");
-        const TokenSwap = await hre.ethers.getContractFactory("TokenSwap");
-        const tokenSwap = await TokenSwap.deploy(
-            await daToken.getAddress(),
-            await mockV3Aggregator.getAddress(),
-            100, // 初始 DAToken 价格 (1 USD)
-            100  // 1% 滑点容忍度
-        );
-        await tokenSwap.waitForDeployment();
-        addresses.TokenSwap = await tokenSwap.getAddress();
-        console.log("TokenSwap 已部署到:", addresses.TokenSwap);
-
-        // 部署 AuctionManager
-        console.log("正在部署 AuctionManager...");
-        const AuctionManager = await hre.ethers.getContractFactory("AuctionManager");
-        const auctionManager = await hre.upgrades.deployProxy(
-            AuctionManager,
-            [deployer.address, await daToken.getAddress()],
-            {
-                kind: 'uups',
-                initializer: 'initialize',
-                unsafeAllow: ['constructor']
-            }
-        );
-        await auctionManager.waitForDeployment();
-        addresses.AuctionManager = await auctionManager.getAddress();
-        console.log("AuctionManager 已部署到:", addresses.AuctionManager);
+        // 部署 DutchAuction
+        console.log("正在部署 DutchAuction...");
+        const DutchAuction = await hre.ethers.getContractFactory("DutchAuction");
+        const dutchAuction = await DutchAuction.deploy();
+        await dutchAuction.waitForDeployment();
+        addresses.DutchAuction = await dutchAuction.getAddress();
+        console.log("DutchAuction 已部署到:", addresses.DutchAuction);
 
         // 验证部署
         console.log("验证部署结果...");
+        
+        // 验证 DAToken
         const tokenBalance = await daToken.balanceOf(deployer.address);
         console.log("部署者 DAToken 余额:", tokenBalance.toString());
 
-        const daTokenAddress = await auctionManager.daToken();
-        console.log("AuctionManager 中的 token 地址:", daTokenAddress);
-
-        // 为 TokenSwap 合约转入一些初始 DAToken
-        const swapInitialBalance = "1000000000000000000000000"; // 1,000,000 DAToken
-        await daToken.transfer(await tokenSwap.getAddress(), swapInitialBalance);
-        console.log("已向 TokenSwap 转入初始 DAToken");
-
         // 保存地址
         saveDeployedAddresses(addresses);
-        console.log("部署完成！");
+        console.log("所有合约部署完成！");
+
+        // 输出部署摘要
+        console.log("\n部署摘要:");
+        console.log("=================");
+        console.log("DAToken:", addresses.DAToken);
+        console.log("DANFT:", addresses.DANFT);
+        console.log("EnglishAuction:", addresses.EnglishAuction);
+        console.log("DutchAuction:", addresses.DutchAuction);
+        console.log("=================");
 
     } catch (error) {
         console.error("部署出错:", error);
@@ -113,4 +89,4 @@ main()
     .catch((error) => {
         console.error(error);
         process.exit(1);
-    }); 
+    });

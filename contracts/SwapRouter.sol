@@ -35,6 +35,8 @@ contract SwapRouter is ISwapRouter{
     }
 
     // **** ADD LIQUIDITY ****
+    // 添加流动性
+    // 返回amountA amountB 是用户实际添加的tokenA tokenB的数量
     function _addLiquidity(
         address tokenA,
         address tokenB,
@@ -47,21 +49,43 @@ contract SwapRouter is ISwapRouter{
         if (SwapFactory(factory).getPair(tokenA, tokenB) == address(0)) {
             SwapFactory(factory).createPair(tokenA, tokenB);
         }
+        //reserveA reserveB 是tokenA tokenB的储备量
+        //amountADesired amountBDesired 是用户想要添加的tokenA tokenB的数量
         (uint reserveA, uint reserveB) = SwapLibrary.getReserves(factory, tokenA, tokenB);
         if (reserveA == 0 && reserveB == 0) {
             (amountA, amountB) = (amountADesired, amountBDesired);
         } else {
+            //amountBOptimal 是根据amountADesired和reserveA reserveB计算出的最优的amountB
             uint amountBOptimal = SwapLibrary.quote(amountADesired, reserveA, reserveB);
             if (amountBOptimal <= amountBDesired) {
+                //如果amountBOptimal小于等于amountBDesired，则amountB为amountBOptimal
                 require(amountBOptimal >= amountBMin, 'DAuctionSwapRouter: INSUFFICIENT_B_AMOUNT');
                 (amountA, amountB) = (amountADesired, amountBOptimal);
             } else {
+                //如果amountBOptimal大于amountBDesired，则amountA为根据amountBDesired和reserveB reserveA计算出的最优的amountA
                 uint amountAOptimal = SwapLibrary.quote(amountBDesired, reserveB, reserveA);
                 assert(amountAOptimal <= amountADesired);
                 require(amountAOptimal >= amountAMin, 'DAuctionSwapRouter: INSUFFICIENT_A_AMOUNT');
                 (amountA, amountB) = (amountAOptimal, amountBDesired);
             }
         }
+    }
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external virtual ensure(deadline) returns (uint amountA, uint amountB, uint liquidity) {
+        (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);
+        address pair = SwapLibrary.pairFor(factory, tokenA, tokenB);
+        TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);
+        TransferHelper.safeTransferFrom(tokenB, msg.sender, pair, amountB);
+        liquidity = ISwapPair(pair).mint(to);
     }
 
     // msg.sender gets the LP token
@@ -83,6 +107,7 @@ contract SwapRouter is ISwapRouter{
         );
         address pair = SwapLibrary.pairFor(factory, token, WETH);
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
+        //将用户转入的 ETH 转成了 WETH
         IWETH(WETH).deposit{value: amountETH}();
         assert(IWETH(WETH).transfer(pair, amountETH));
         liquidity = ISwapPair(pair).mint(to);

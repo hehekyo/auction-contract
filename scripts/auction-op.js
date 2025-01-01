@@ -34,21 +34,21 @@ async function main() {
 
         console.log("\n=== 初始化测试环境 ===");
 
+        // 铸造 NFT
+        console.log("\n=== 铸造 NFT ===");
+        const nftIds = [];
+        for (let i = 0; i < nftUrls.length; i++) {
+            console.log(`铸造 NFT #${i}...`);
+            await daNFT.connect(owner).mint(nftUrls[i]); // 使用 imageURI 铸造 NFT
+            nftIds.push(i);
+            console.log(`NFT #${i} 铸造完成，所有者: ${await daNFT.ownerOf(i)}`);
+        }
+
         // 铸造代币给测试账户
         const tokenAmount = 1000; // 直接使用数值，不需要 parseEther
         for (const account of [owner, addr1, addr2]) {
             await daToken.mint(account.address, tokenAmount);
             console.log(`${account.address} DAToken 余额: ${await daToken.balanceOf(account.address)}`);
-        }
-
-        // 铸造 NFT
-        console.log("\n=== 铸造 NFT ===");
-        const nftIds = [];
-        for(let i = 0; i < 3; i++) {
-            console.log(`铸造 NFT #${i}...`);
-            await daNFT.connect(owner).mint(addr1.address, i, nftUrls[i]);
-            nftIds.push(i);
-            console.log(`NFT #${i} 铸造完成，所有者: ${await daNFT.ownerOf(i)}`);
         }
 
         // 创建英式拍卖
@@ -58,6 +58,15 @@ async function main() {
             duration: 3600 // 1小时
         };
 
+        // 转移 NFT 到 addr1
+        console.log(`将 NFT #${ nftIds[0]} 从 ${owner.address} 转移到 ${addr1.address}...`);
+        await daNFT.connect(owner).transferFrom(owner.address, addr1.address,  nftIds[0]);
+        console.log(`NFT #${ nftIds[0]} 已成功转移到 ${addr1.address}`);
+
+        // 验证转移
+        const newOwner = await daNFT.ownerOf( nftIds[0]);
+        console.log(`NFT #${ nftIds[0]} 的新拥有者: ${newOwner}`);
+        
         // 授权 NFT 给拍卖合约
         await daNFT.connect(addr1).approve(englishAuction.getAddress(), nftIds[0]);
         

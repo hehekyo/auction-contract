@@ -32,6 +32,7 @@ library SwapLibrary {
         (reserveA, reserveB) = tokenA == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
     }
 
+    // for swap
     // given some amount of an asset and pair reserves, returns an equivalent amount of the other asset
     function quote(uint amountA, uint reserveA, uint reserveB) internal pure returns (uint amountB) {
         require(amountA > 0, 'SwapLibrary: INSUFFICIENT_AMOUNT');
@@ -39,6 +40,27 @@ library SwapLibrary {
         amountB = amountA.mul(reserveB) / reserveA;
     }
 
+    /**
+    根据 AMM 的原理，恒定乘积公式「x * y = K」，兑换前后 K 值不变。因此，在不考虑交易手续费的情况下，以下公式会成立：
+    reserveIn * reserveOut = (reserveIn + amountIn) * (reserveOut - amountOut)
+    将公式右边的表达式展开，并推导下，就变成了
+    reserveIn * reserveOut = reserveIn * reserveOut + amountIn * reserveOut - (reserveIn + amountIn) * amountOut
+    ->
+    amountIn * reserveOut = (reserveIn + amountIn) * amountOut
+    ->
+    amountOut = amountIn * reserveOut / (reserveIn + amountIn)
+
+    而实际上交易时，还需要扣减千分之三的交易手续费，所以实际上：
+    amountIn = amountIn * 997 / 1000
+
+    代入上面的公式后，最终结果就变成了：
+    amountOut = (amountIn * 997 / 1000) * reserverOut / (reserveIn + amountIn * 997 / 1000)
+    ->
+    amountOut = amountIn * 997 * reserveOut / 1000 * (reserveIn + amountIn * 997 / 1000)
+    ->
+    amountOut = amountIn * 997 * reserveOut / (reserveIn * 1000 + amountIn * 997)
+    
+     */
     // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) internal pure returns (uint amountOut) {
         require(amountIn > 0, 'SwapLibrary: INSUFFICIENT_INPUT_AMOUNT');

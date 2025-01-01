@@ -5,7 +5,7 @@ interface ISwapRouter {
     function factory() external view returns (address);
     function WETH() external view returns (address);
 
-    /*
+    
     function addLiquidity(
         address tokenA,
         address tokenB,
@@ -16,7 +16,7 @@ interface ISwapRouter {
         address to,
         uint deadline
     ) external returns (uint amountA, uint amountB, uint liquidity);
-    */
+    
     function addLiquidityWithETH(
         address token,
         uint amountTokenDesired,

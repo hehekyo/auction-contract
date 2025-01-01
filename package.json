@@ -9,13 +9,13 @@
     "test:erc20": "npx hardhat test test/MyERC20.test.js",
     "test:nft": "npx hardhat test test/DANFT.test.js",
     "test:swap": "npx hardhat test test/TokenSwap.test.js",
-    "op:nft": "npx hardhat run scripts/nft-operations.js --network localhost",
     "test:utils": "mocha utils/**/*.test.js",
-    "deploy": "npx hardhat run scripts/deploy.js --network localhost",
-    "auction:events": "npx hardhat run scripts/query-auction-events.ts --network localhost",
     "upload-nfts": "node scripts/upload-nfts.js",
-    "deploy-new": "npx hardhat run scripts/deploy-new.js --network localhost",
-    "op-new": "npx hardhat run scripts/auction-op-new.js --network localhost"
+    "deploy": "npx hardhat run scripts/deploy.js --network localhost",
+    "auction-op": "npx hardhat run scripts/auction-op.js --network localhost",
+    "console": "npx hardhat console --network localhost",
+    "test:swap-router": "npx hardhat test test/SwapRouter.test.js"
+
   },
   "author": "",
   "license": "ISC",
