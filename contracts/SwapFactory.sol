@@ -6,8 +6,7 @@ import {ISwapPair} from "./interfaces/ISwapPair.sol";
 import {SwapPair} from "./SwapPair.sol";
 
 contract SwapFactory is ISwapFactory {
-    bytes32 public constant PAIR_HASH =
-        keccak256(type(SwapPair).creationCode);
+    bytes32 public PAIR_HASH;
 
     address public override feeTo;
     address public override feeToSetter;
@@ -17,6 +16,7 @@ contract SwapFactory is ISwapFactory {
 
     constructor(address _feeToSetter) {
         feeToSetter = _feeToSetter;
+        PAIR_HASH = keccak256(type(SwapPair).creationCode);
     }
 
     function allPairsLength() external view override returns (uint256) {
