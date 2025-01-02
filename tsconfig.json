@@ -1,3 +1,19 @@
 {
-
-}
+    "compilerOptions": {
+      "esModuleInterop": true,
+      "forceConsistentCasingInFileNames": true,
+      "lib": ["ES2023"],
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "noImplicitAny": true,
+      "outDir": "dist",
+      "resolveJsonModule": true,
+      "sourceMap": true,
+      "strict": true,
+      "target": "es2021"
+    },
+    "exclude": ["node_modules"],
+    "files": ["./hardhat.config.ts"],
+    "include": ["scripts", "test","utils"]
+  }
+  

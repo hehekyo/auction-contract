@@ -1,7 +1,8 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 pragma solidity ^0.8.22;
 
-interface IERC20 {
+interface ISwapERC20 {
     event Approval(
         address indexed owner,
         address indexed spender,
