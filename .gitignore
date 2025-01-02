@@ -18,3 +18,6 @@ ignition/deployments/chain-31337
 
 # NFT.Storage files
 nft-metadata.json
+
+.deps
+.states

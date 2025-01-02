@@ -6,7 +6,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 // tasks
-// import "./src/tasks/accounts";
+import "./src/tasks/accounts";
 
 const config: HardhatUserConfig = {
   networks: {
@@ -15,7 +15,7 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: "0.8.4",
+    version: "0.8.22",
     settings: {
       optimizer: {
         enabled: true,
@@ -35,7 +35,7 @@ const config: HardhatUserConfig = {
     target: "ethers-v6",
   },
   paths: {
-    tests: "./test",
+    tests: "./src/test",
   },
 };
 
