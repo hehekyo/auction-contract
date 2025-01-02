@@ -96,7 +96,6 @@ contract UniswapV2Router is IUniswapV2Router {
         ensure(deadline)
         returns (uint256 amountA, uint256 amountB, uint256 liquidity)
     {
-        console.log("=====_addLiquidity");
 
         (amountA, amountB) = _addLiquidity(
             tokenA,
@@ -106,7 +105,6 @@ contract UniswapV2Router is IUniswapV2Router {
             amountAMin,
             amountBMin
         );
-        console.log("amountA amountB", amountA, amountB);
 
         address pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
         TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);

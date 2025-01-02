@@ -65,14 +65,7 @@ describe("UniswapV2Router", () => {
       pairFactory.interface,
       wallet,
     );
-    console.log("token0", await token0.getAddress());
-    console.log("token1", await token1.getAddress());
-    console.log("WETH", await WETH.getAddress());
-    console.log("WETHPartner", await WETHPartner.getAddress());
-    console.log("factoryV2", await factoryV2.getAddress());
-    console.log("router02", await router02.getAddress());
-    console.log("pair", await pair.getAddress());
-
+ 
     return {
       token0,
       token1,
@@ -204,6 +197,7 @@ describe("UniswapV2Router", () => {
     const expectedLiquidity = expandTo18Decimals(2);
     await token0.approve(await router02.getAddress(), ethers.MaxUint256);
     await token1.approve(await router02.getAddress(), ethers.MaxUint256);
+
     await expect(
       router02.addLiquidity(
         await token0.getAddress(),
@@ -602,7 +596,7 @@ describe("UniswapV2Router", () => {
         ethers.MaxUint256,
       );
       const receipt = await tx.wait();
-      expect(receipt!.gasUsed).to.eq(101097, "gas used");
+      expect(receipt!.gasUsed).to.eq(100679, "gas used");
     });
   });
 
@@ -831,7 +825,7 @@ describe("UniswapV2Router", () => {
         },
       );
       const receipt = await tx.wait();
-      expect(receipt!.gasUsed).to.eq(138689, "gas used");
+      expect(receipt!.gasUsed).to.eq(138173, "gas used");
     }).retries(3);
   });
 

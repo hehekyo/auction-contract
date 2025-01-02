@@ -34,7 +34,7 @@ library UniswapV2Library {
                             bytes1(0xff),
                             factory,
                             keccak256(abi.encodePacked(token0, token1)),
-                            hex"443533a897cfad2762695078bf6ee9b78b4edcda64ec31e1c83066cee4c90a7e" // init code hash
+                            hex"7a861c90dfb54298d7a6e002bacd0c2ae2bddcbf0723839e793294085da9aaf3" // init code hash
                         )
                     )
                 )
@@ -49,11 +49,9 @@ library UniswapV2Library {
         address tokenB
     ) internal view returns (uint256 reserveA, uint256 reserveB) {
         (address token0, ) = sortTokens(tokenA, tokenB);
-        console.log("token0:", token0);
-        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(
-            pairFor(factory, tokenA, tokenB)
-        ).getReserves();
-        console.log("Reserve0:", reserve0, "Reserve1:", reserve1);
+        address pair = pairFor(factory, tokenA, tokenB);
+
+        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(pair).getReserves();
 
         (reserveA, reserveB) = tokenA == token0
             ? (reserve0, reserve1)
