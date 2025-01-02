@@ -14,8 +14,8 @@ contract SwapFactory is ISwapFactory {
     mapping(address => mapping(address => address)) public override getPair;
     address[] public override allPairs;
 
-    constructor(address _feeToSetter) {
-        feeToSetter = _feeToSetter;
+    constructor() {//)address _feeToSetter) {
+        //feeToSetter = _feeToSetter;
         PAIR_HASH = keccak256(type(SwapPair).creationCode);
     }
 

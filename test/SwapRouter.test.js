@@ -35,8 +35,8 @@ describe("SwapRouter", function () {
         SwapRouter = await ethers.getContractFactory("SwapRouter");
         swapRouter = await SwapRouter.deploy(
             await swapFactory.getAddress(),
-            await weth.getAddress(),
-            await daToken.getAddress()
+            await weth.getAddress()//,
+            //await daToken.getAddress()
         );
         await swapRouter.waitForDeployment();
         console.log("SwapRouter deployed to:", await swapRouter.getAddress());
@@ -65,6 +65,18 @@ describe("SwapRouter", function () {
         expect(pair).to.not.equal(ethers.ZeroAddress);
     });
 
+    describe("SwapLibrary", function() {
+        it("Should get init code hash", async function() {
+            // 获取合约字节码
+            const SwapPair = await ethers.getContractFactory("SwapPair");
+            const initCode = SwapPair.bytecode;
+            
+            // 计算 init code hash
+            const initCodeHash = ethers.keccak256(initCode);
+            console.log("Init code hash:", initCodeHash);
+        });
+    });
+
     describe("添加流动性", function () {
         it("应该能够添加 ETH 和代币的流动性", async function () {
             const tokenAmount = ethers.parseEther("100");
@@ -78,6 +90,7 @@ describe("SwapRouter", function () {
             
             // 检查流动性池是否存在
             const pair = await swapFactory.getPair(await daToken.getAddress(), await weth.getAddress());
+
             expect(pair).to.not.equal(ethers.ZeroAddress);
 
             // 授权路由合约使用代币
@@ -87,9 +100,12 @@ describe("SwapRouter", function () {
             const allowance = await daToken.allowance(owner.address, await swapRouter.getAddress());
             expect(allowance).to.equal(tokenAmount);
 
+            const balance = await ethers.provider.getBalance(owner.address);
+            console.log("Owner balance:", ethers.formatEther(balance));  // 转换为 ETH 单位
+
             try {
                 // 添加流动性
-                const tx = await swapRouter.addLiquidityWithETH(
+                const tx = await swapRouter.addLiquidityETH(
                     await daToken.getAddress(),
                     tokenAmount,
                     minTokenAmount,
@@ -129,7 +145,7 @@ describe("SwapRouter", function () {
             await daToken.connect(owner).approve(swapRouter.getAddress(), tokenAmount);
 
             await expect(
-                swapRouter.addLiquidityWithETH(
+                swapRouter.addLiquidityETH(
                     await daToken.getAddress(),
                     tokenAmount,
                     0,
@@ -149,7 +165,7 @@ describe("SwapRouter", function () {
             const ethAmount = ethers.parseEther("1");
 
             await daToken.connect(owner).approve(swapRouter.getAddress(), tokenAmount);
-            await swapRouter.addLiquidityWithETH(
+            await swapRouter.addLiquidityETH(
                 await daToken.getAddress(),
                 tokenAmount,
                 0,
@@ -190,7 +206,7 @@ describe("SwapRouter", function () {
             const ethAmount = ethers.parseEther("10");
 
             await daToken.connect(owner).approve(swapRouter.getAddress(), tokenAmount);
-            await swapRouter.addLiquidityWithETH(
+            await swapRouter.addLiquidityETH(
                 await daToken.getAddress(),
                 tokenAmount,
                 0,
