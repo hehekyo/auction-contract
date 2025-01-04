@@ -12,7 +12,7 @@
       "strict": true,
       "target": "es2021"
     },
-    "exclude": ["node_modules"],
+    // "exclude": ["node_modules"],
     "files": ["./hardhat.config.ts"],
     "include": ["src","typechain-types"]
   }

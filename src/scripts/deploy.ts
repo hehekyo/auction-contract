@@ -1,0 +1,78 @@
+import { ethers } from "hardhat";
+import fs from 'fs';
+import path from 'path';
+
+const ADDRESS_FILE = path.join(__dirname, './contracts.json');
+
+async function main() {
+  const [deployer] = await ethers.getSigners();
+  console.log("Deploying contracts with account:", deployer.address);
+
+  // Deploy WETH
+  const WETH = await ethers.getContractFactory("WETH");
+  const weth = await WETH.deploy();
+  await weth.waitForDeployment();
+  console.log("WETH deployed to:", await weth.getAddress());
+
+  // Deploy DAToken with 1M initial supply
+  const initialSupply = 1000000; // Use BigNumber
+  const DAToken = await ethers.getContractFactory("DAToken");
+  const daToken = await DAToken.deploy(initialSupply, deployer.address);
+  await daToken.waitForDeployment();
+  console.log("DAToken deployed to:", await daToken.getAddress());
+
+  // Deploy DANFT
+  const DANFT = await ethers.getContractFactory("DANFT");
+  const daNFT = await DANFT.deploy(deployer.address);
+  await daNFT.waitForDeployment();
+  console.log("DANFT deployed to:", await daNFT.getAddress());
+
+  // Deploy UniswapV2Factory
+  const UniswapV2Factory = await ethers.getContractFactory("UniswapV2Factory");
+  const factory = await UniswapV2Factory.deploy(deployer.address);
+  await factory.waitForDeployment();
+  console.log("UniswapV2Factory deployed to:", await factory.getAddress());
+
+  // Deploy UniswapV2Router
+  const UniswapV2Router = await ethers.getContractFactory("UniswapV2Router");
+  const router = await UniswapV2Router.deploy(
+    await factory.getAddress(),
+    await weth.getAddress()
+  );
+  await router.waitForDeployment();
+  console.log("UniswapV2Router deployed to:", await router.getAddress());
+
+  // Deploy DutchAuction
+  const DutchAuction = await ethers.getContractFactory("DutchAuction");
+  const dutchAuction = await DutchAuction.deploy();
+  await dutchAuction.waitForDeployment();
+  console.log("DutchAuction deployed to:", await dutchAuction.getAddress());
+
+  // Deploy EnglishAuction
+  const EnglishAuction = await ethers.getContractFactory("EnglishAuction");
+  const englishAuction = await EnglishAuction.deploy(await daToken.getAddress());
+  await englishAuction.waitForDeployment();
+  console.log("EnglishAuction deployed to:", await englishAuction.getAddress());
+
+  // Save deployed addresses for verification
+  const addresses = {
+    WETH: await weth.getAddress(),
+    DAToken: await daToken.getAddress(),
+    DANFT: await daNFT.getAddress(),
+    UniswapV2Factory: await factory.getAddress(),
+    UniswapV2Router: await router.getAddress(),
+    DutchAuction: await dutchAuction.getAddress(),
+    EnglishAuction: await englishAuction.getAddress()
+  };
+
+  // Write addresses to JSON file
+  fs.writeFileSync(ADDRESS_FILE, JSON.stringify(addresses, null, 2));
+  console.log("\nDeployed contract addresses saved to:", ADDRESS_FILE);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

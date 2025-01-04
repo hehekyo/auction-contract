@@ -6,16 +6,21 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract DAToken is ERC20, Ownable {
     constructor(
-        address initialOwner,
-        uint256 initialSupply
+        uint256 initialSupply,
+        address initialOwner 
     ) 
         ERC20("DAToken", "DAT") 
-        Ownable(initialOwner)  
+        Ownable(initialOwner)
     {
-        _mint(msg.sender, initialSupply);
+        require(initialOwner != address(0), 'Owner cannot be 0');
+        _mint(msg.sender, initialSupply * 10**18);
     }
 
     function mint(address to, uint256 amount) public onlyOwner {
-        _mint(to, amount);
+        _mint(to, amount * 10**18);
+    }
+
+    function burn(address from, uint256 amount) public onlyOwner {
+        _burn(from, amount * 10**18);
     }
 }
