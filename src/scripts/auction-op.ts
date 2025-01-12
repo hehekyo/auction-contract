@@ -21,6 +21,15 @@ async function main() {
     const nftUrls: string[] = [
         "ipfs://QmV6hWqJ1du519rrrk23G9XCmKuvRzvjaPUy2tLtfEwgse",
         "ipfs://QmUwivpSjVnzDaMEUZ47tHhmZbeao3eZQFqt2nKf5QzyaH",
+        "ipfs://QmTM6pgQRbdJ7kfk1UYQDJE6g95Z2pc7g1Sb5rE1GY4JdN",
+        "ipfs://QmV6hWqJ1du519rrrk23G9XCmKuvRzvjaPUy2tLtfEwgse",
+        "ipfs://QmUwivpSjVnzDaMEUZ47tHhmZbeao3eZQFqt2nKf5QzyaH",
+        "ipfs://QmTM6pgQRbdJ7kfk1UYQDJE6g95Z2pc7g1Sb5rE1GY4JdN",
+        "ipfs://QmV6hWqJ1du519rrrk23G9XCmKuvRzvjaPUy2tLtfEwgse",
+        "ipfs://QmUwivpSjVnzDaMEUZ47tHhmZbeao3eZQFqt2nKf5QzyaH",
+        "ipfs://QmTM6pgQRbdJ7kfk1UYQDJE6g95Z2pc7g1Sb5rE1GY4JdN",
+        "ipfs://QmV6hWqJ1du519rrrk23G9XCmKuvRzvjaPUy2tLtfEwgse",
+        "ipfs://QmUwivpSjVnzDaMEUZ47tHhmZbeao3eZQFqt2nKf5QzyaH",
         "ipfs://QmTM6pgQRbdJ7kfk1UYQDJE6g95Z2pc7g1Sb5rE1GY4JdN"
     ];
 
@@ -53,8 +62,8 @@ async function main() {
             console.log(`${account.address} DAToken balance: ${await daToken.balanceOf(account.address)}`);
         }
 
-        // Create English auction
-        console.log("\n=== Creating English Auction ===");
+        // Create first English auction (existing code)
+        console.log("\n=== Creating First English Auction ===");
         const englishAuctionParams = {
             startingPrice: expandTo18Decimals(50),
             duration: 3600 // 1 hour
@@ -220,6 +229,29 @@ async function main() {
         console.log("\n=== Final Token Balances ===");
         console.log("Token1 balance:", ethers.formatEther(await token1.balanceOf(owner.address)));
         console.log("Token2 balance:", ethers.formatEther(await token2.balanceOf(owner.address)));
+
+        // Create additional English auctions
+        console.log("\n=== Creating Additional English Auctions ===");
+        for(let i = 1; i < nftUrls.length-2; i++) {
+            console.log(`\nCreating English Auction for NFT #${nftIds[i]}`);
+            
+            // Transfer NFT to addr1
+            await daNFT.connect(owner).transferFrom(owner.address, addr1.address, nftIds[i]);
+            console.log(`NFT #${nftIds[i]} transferred to ${addr1.address}`);
+            
+            // Approve NFT for auction contract
+            await daNFT.connect(addr1).approve(englishAuction.getAddress(), nftIds[i]);
+            
+            // Create auction with different starting prices
+            const startingPrice = expandTo18Decimals(30 + i * 5); // Incremental starting prices
+            await englishAuction.connect(addr1).createAuction(
+                addresses.DANFT,
+                nftIds[i],
+                startingPrice,
+                englishAuctionParams.duration
+            );
+            console.log(`English auction created for NFT #${nftIds[i]} with starting price ${30 + i * 5} tokens`);
+        }
 
     } catch (error) {
         console.error("Operation failed:", error);

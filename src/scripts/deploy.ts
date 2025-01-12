@@ -60,6 +60,19 @@ async function main() {
   await englishAuction.waitForDeployment();
   console.log("EnglishAuction deployed to:", await englishAuction.getAddress());
 
+  // Deploy Airdrop contract
+  const Airdrop = await ethers.getContractFactory("Airdrop");
+  const airdrop = await Airdrop.deploy();
+  await airdrop.waitForDeployment();
+  console.log("Airdrop deployed to:", await airdrop.getAddress());
+
+  // Deploy AdAlliance contract
+  const AdAlliance = await ethers.getContractFactory("AdAlliance");
+  const adAlliance = await AdAlliance.deploy(daToken.getAddress()); // Pass the DAToken address
+  await adAlliance.waitForDeployment();
+  console.log("AdAlliance deployed to:", await adAlliance.getAddress());
+
+
   // Save deployed addresses for verification
   const addresses = {
     WETH: await weth.getAddress(),
@@ -69,7 +82,9 @@ async function main() {
     UniswapV2Router: await router.getAddress(),
     UniswapV2Query: await uniswapQuery.getAddress(),
     DutchAuction: await dutchAuction.getAddress(),
-    EnglishAuction: await englishAuction.getAddress()
+    EnglishAuction: await englishAuction.getAddress(),
+    Airdrop: await airdrop.getAddress(),
+    AdAlliance: await adAlliance.getAddress()
   };
 
   // Write addresses to JSON file
