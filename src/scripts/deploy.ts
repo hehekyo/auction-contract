@@ -42,6 +42,12 @@ async function main() {
   await router.waitForDeployment();
   console.log("UniswapV2Router deployed to:", await router.getAddress());
 
+  // Deploy UniswapV2Query
+  const UniswapV2Query = await ethers.getContractFactory("UniswapV2Query");
+  const uniswapQuery = await UniswapV2Query.deploy(await factory.getAddress());
+  await uniswapQuery.waitForDeployment();
+  console.log("UniswapV2Query deployed to:", await uniswapQuery.getAddress());
+
   // Deploy DutchAuction
   const DutchAuction = await ethers.getContractFactory("DutchAuction");
   const dutchAuction = await DutchAuction.deploy();
@@ -61,6 +67,7 @@ async function main() {
     DANFT: await daNFT.getAddress(),
     UniswapV2Factory: await factory.getAddress(),
     UniswapV2Router: await router.getAddress(),
+    UniswapV2Query: await uniswapQuery.getAddress(),
     DutchAuction: await dutchAuction.getAddress(),
     EnglishAuction: await englishAuction.getAddress()
   };

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "npx hardhat node",
+    "compile": "npx hardhat compile",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:english": "npx hardhat test src/test/EnglishAuction.test.js",
     "test:nft": "npx hardhat test src/test/DANFT.test.js",

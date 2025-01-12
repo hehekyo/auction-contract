@@ -341,6 +341,13 @@ contract UniswapV2Router is IUniswapV2Router {
 
     // **** SWAP ****
     // requires the initial amount to have already been sent to the first pair
+    /**
+     * @notice Internal swap function used by all swap variants
+     * @dev Requires the initial amount to have already been sent to the first pair
+     * @param amounts Array of amounts for each swap step
+     * @param path Array of token addresses defining the swap path
+     * @param _to Address that will receive the final output tokens
+     */
     function _swap(
         uint256[] memory amounts,
         address[] memory path,
@@ -350,12 +357,20 @@ contract UniswapV2Router is IUniswapV2Router {
             (address input, address output) = (path[i], path[i + 1]);
             (address token0, ) = UniswapV2Library.sortTokens(input, output);
             uint256 amountOut = amounts[i + 1];
+            
+            // Determine the output amounts for the swap
             (uint256 amount0Out, uint256 amount1Out) = input == token0
                 ? (uint256(0), amountOut)
                 : (amountOut, uint256(0));
+            
+            // Calculate the recipient of this step
+            // If this is not the final step, send to the next pair
+            // Otherwise, send to the specified recipient
             address to = i < path.length - 2
                 ? UniswapV2Library.pairFor(factory, output, path[i + 2])
                 : _to;
+            
+            // Execute the swap on the current pair
             IUniswapV2Pair(UniswapV2Library.pairFor(factory, input, output))
                 .swap(amount0Out, amount1Out, to, new bytes(0));
         }
@@ -415,6 +430,17 @@ contract UniswapV2Router is IUniswapV2Router {
         _swap(amounts, path, to);
     }
 
+    /**
+     * @notice Swaps an exact amount of ETH for tokens
+     * @dev User specifies exact input (msg.value) and minimum output
+     * @param amountOutMin The minimum amount of tokens the user will accept
+     * @param path Array of token addresses representing the swap path. First token must be WETH
+     * @param to Address that will receive the output tokens
+     * @param deadline Unix timestamp after which the transaction will revert
+     * @return amounts Array of amounts for each swap step:
+     *         - amounts[0] = ETH input amount
+     *         - amounts[amounts.length-1] = token output amount
+     */
     function swapExactETHForTokens(
         uint256 amountOutMin,
         address[] calldata path,
@@ -428,22 +454,45 @@ contract UniswapV2Router is IUniswapV2Router {
         ensure(deadline)
         returns (uint256[] memory amounts)
     {
+        // Validate that the path starts with WETH
         require(path[0] == WETH, "UniswapV2Router: INVALID_PATH");
+        
+        // Calculate the output amounts for each step in the path
         amounts = UniswapV2Library.getAmountsOut(factory, msg.value, path);
+        
+        // Ensure the final output amount meets minimum expectations
         require(
             amounts[amounts.length - 1] >= amountOutMin,
             "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
+        
+        // Convert ETH to WETH
         IWETH(WETH).deposit{value: amounts[0]}();
+        
+        // Transfer WETH to the first pair
         assert(
             IWETH(WETH).transfer(
                 UniswapV2Library.pairFor(factory, path[0], path[1]),
                 amounts[0]
             )
         );
+        
+        // Execute the swap across the path
         _swap(amounts, path, to);
     }
 
+    /**
+     * @notice Swaps tokens for an exact amount of ETH
+     * @dev User specifies maximum input and exact output
+     * @param amountOut The exact amount of ETH to receive
+     * @param amountInMax The maximum amount of tokens willing to spend
+     * @param path Array of token addresses. Last address must be WETH
+     * @param to Address that will receive the ETH
+     * @param deadline Unix timestamp after which the transaction will revert
+     * @return amounts Array of amounts for each swap step:
+     *         - amounts[0] = token input amount
+     *         - amounts[amounts.length-1] = ETH output amount
+     */
     function swapTokensForExactETH(
         uint256 amountOut,
         uint256 amountInMax,
@@ -457,19 +506,30 @@ contract UniswapV2Router is IUniswapV2Router {
         ensure(deadline)
         returns (uint256[] memory amounts)
     {
+        // Validate that the path ends with WETH
         require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
+        
+        // Calculate the required input amount for the desired output
         amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
+        
+        // Verify the input amount is within the user's specified maximum
         require(
             amounts[0] <= amountInMax,
             "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
+        
+        // Transfer tokens from user to the first pair
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
             UniswapV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
+        
+        // Execute the swap
         _swap(amounts, path, address(this));
+        
+        // Convert WETH to ETH and send to recipient
         IWETH(WETH).withdraw(amounts[amounts.length - 1]);
         TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
     }

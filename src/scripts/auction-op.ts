@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 import fs from 'fs';
 import path from 'path';
-import { DANFT, DAToken, EnglishAuction, WETH, UniswapV2Router } from "../../typechain-types";
+import { DANFT, DAToken, EnglishAuction, ERC20Token, UniswapV2Router, WETH, UniswapV2Query } from "../../typechain-types";
 import { expandTo18Decimals } from "../utils/utilities";
 
 const ADDRESS_FILE = path.join(__dirname, './contracts.json');
@@ -31,6 +31,8 @@ async function main() {
         const englishAuction = (await ethers.getContractFactory("EnglishAuction")).attach(addresses.EnglishAuction) as EnglishAuction;
         const weth = (await ethers.getContractFactory("WETH")).attach(addresses.WETH) as WETH;
         const router = (await ethers.getContractFactory("UniswapV2Router")).attach(addresses.UniswapV2Router) as UniswapV2Router;
+        const uniswapQuery = (await ethers.getContractFactory("UniswapV2Query")).attach(addresses.UniswapV2Query) as UniswapV2Query;
+   
 
         console.log("\n=== Initializing Test Environment ===");
 
@@ -129,6 +131,23 @@ async function main() {
         // 为代币对添加流动性
         const deadline = Math.floor(Date.now() / 1000) + 36000; // 10小时后过期
 
+        // 为 DAToken-WETH 添加流动性
+        const daTokenAmount = expandTo18Decimals(1000);
+        const wethAmount = expandTo18Decimals(10);
+        
+        await daToken.approve(router.getAddress(), daTokenAmount);
+        
+        await router.addLiquidityETH(
+            await daToken.getAddress(),
+            daTokenAmount,
+            0,
+            0,
+            owner.address,
+            deadline,
+            { value: wethAmount }
+        );
+        console.log("Added DAToken-ETH liquidity");
+
         // 添加 Token1-ETH 流动性
         const token1Amount = expandTo18Decimals(1000);
         const ethAmount = expandTo18Decimals(10);
@@ -162,6 +181,16 @@ async function main() {
             deadline
         );
         console.log("Added Token1-Token2 liquidity");
+
+        // 在添加流动性后获取流动性池信息
+        console.log("\n=== 查询流动性池信息 ===");
+        // 获取特定代币对的信息
+        // const pairInfo = await uniswapQuery.getPairInfo(token1.getAddress(), addresses.WETH);
+        // console.log("Pair Info:", pairInfo);
+
+        // 获取所有流动性池的信息
+        const allPairsInfo = await uniswapQuery.getAllPairsInfo();
+        console.log("All Pairs Info:", allPairsInfo);
 
         // ETH swap 到 Token1
         const swapEthAmount = expandTo18Decimals(1);
