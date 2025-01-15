@@ -10,8 +10,14 @@ import "./src/tasks/accounts";
 
 const config: HardhatUserConfig = {
   networks: {
-    hardhat: {
-      blockGasLimit: 30000000,
+    hardhat:{
+      chainId:1337
+    },
+    ganache: {
+      url: "http://127.0.0.1:8545",
+      accounts: [
+        "0x094725e32b07849e90451a28eea107eba50d9f4ab43995ba2d41d12aacd55744",
+      ],
     },
   },
   solidity: {

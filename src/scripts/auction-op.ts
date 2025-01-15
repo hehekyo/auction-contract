@@ -4,7 +4,7 @@ import path from 'path';
 import { DANFT, DAToken, EnglishAuction, ERC20Token, UniswapV2Router, WETH, UniswapV2Query } from "../../typechain-types";
 import { expandTo18Decimals } from "../utils/utilities";
 
-const ADDRESS_FILE = path.join(__dirname, './contracts.json');
+const ADDRESS_FILE = path.join(__dirname, '../../config/contracts.json');
 
 function getDeployedAddresses(): Record<string, string> {
     if (!fs.existsSync(ADDRESS_FILE)) {

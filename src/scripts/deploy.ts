@@ -2,7 +2,14 @@ import { ethers } from "hardhat";
 import fs from 'fs';
 import path from 'path';
 
-const ADDRESS_FILE = path.join(__dirname, './contracts.json');
+const ADDRESS_FILE = path.join(__dirname, '../../config/contracts.json');
+const ENV_FILE = path.join(__dirname, '../../config/env.conf');
+
+// 确保 config 目录存在
+const configDir = path.dirname(ADDRESS_FILE);
+if (!fs.existsSync(configDir)) {
+  fs.mkdirSync(configDir, { recursive: true });
+}
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -88,8 +95,26 @@ async function main() {
   };
 
   // Write addresses to JSON file
-  fs.writeFileSync(ADDRESS_FILE, JSON.stringify(addresses, null, 2));
-  console.log("\nDeployed contract addresses saved to:", ADDRESS_FILE);
+  if (!fs.existsSync(ADDRESS_FILE)) {
+    fs.writeFileSync(ADDRESS_FILE, JSON.stringify(addresses, null, 2));
+    console.log("\nDeployed contract addresses saved to:", ADDRESS_FILE);
+  }
+
+  // 生成 env.conf 文件
+  if (!fs.existsSync(ENV_FILE)) {
+    const envContent = `
+NEXT_PUBLIC_AUCTION_CONTRACT_ADDRESS=${await englishAuction.getAddress()}
+NEXT_PUBLIC_NFT_CONTRACT_ADDRESS=${await daNFT.getAddress()}
+NEXT_PUBLIC_DAT_CONTRACT_ADDRESS=${await daToken.getAddress()}
+NEXT_PUBLIC_WETH_ADDRESS=${await weth.getAddress()}
+NEXT_PUBLIC_FACTORY_ADDRESS=${await factory.getAddress()}
+NEXT_PUBLIC_ROUTER_ADDRESS=${await router.getAddress()}
+NEXT_PUBLIC_QUERY_ADDRESS=${await uniswapQuery.getAddress()}
+`;
+
+    fs.writeFileSync(ENV_FILE, envContent.trim());
+    console.log("Environment variables saved to: config/env.conf");
+  }
 }
 
 main()
